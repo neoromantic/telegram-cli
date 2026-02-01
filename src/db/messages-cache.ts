@@ -46,10 +46,14 @@ export interface MessagesCache {
   upsertBatch(messages: MessageInput[]): void
   /** Get a message by chat_id and message_id */
   get(chatId: number, messageId: number): MessageCacheRow | null
+  /** Find chat IDs for given message IDs (for delete events without chat context) */
+  findChatIdsByMessageIds(messageIds: number[]): Map<number, number>
   /** List messages for a chat in reverse chronological order */
   listByChatId(chatId: number, options: ListMessagesOptions): MessageCacheRow[]
   /** Mark messages as deleted */
   markDeleted(chatId: number, messageIds: number[]): void
+  /** Mark messages as deleted when chat ID is unknown - looks up chat from cache */
+  markDeletedByMessageIds(messageIds: number[]): number
   /** Update message text (for edits) */
   updateText(
     chatId: number,
@@ -181,6 +185,29 @@ export function createMessagesCache(db: Database): MessagesCache {
       return stmts.get.get({ $chat_id: chatId, $message_id: messageId }) ?? null
     },
 
+    findChatIdsByMessageIds(messageIds: number[]): Map<number, number> {
+      const result = new Map<number, number>()
+      if (messageIds.length === 0) return result
+
+      // Query each message ID to find its chat
+      // Note: This does a table scan per message ID, but delete events typically have few IDs
+      const stmt = db.query(
+        'SELECT chat_id, message_id FROM messages_cache WHERE message_id = $message_id LIMIT 1',
+      )
+
+      for (const messageId of messageIds) {
+        const row = stmt.get({ $message_id: messageId }) as {
+          chat_id: number
+          message_id: number
+        } | null
+        if (row) {
+          result.set(row.message_id, row.chat_id)
+        }
+      }
+
+      return result
+    },
+
     listByChatId(
       chatId: number,
       options: ListMessagesOptions,
@@ -209,6 +236,41 @@ export function createMessagesCache(db: Database): MessagesCache {
         }
       })
       transaction()
+    },
+
+    markDeletedByMessageIds(messageIds: number[]): number {
+      if (messageIds.length === 0) return 0
+
+      // First, find which chats these messages belong to
+      const chatMap = this.findChatIdsByMessageIds(messageIds)
+      if (chatMap.size === 0) return 0
+
+      // Group message IDs by chat ID for efficient batch updates
+      const byChatId = new Map<number, number[]>()
+      for (const [messageId, chatId] of chatMap) {
+        const existing = byChatId.get(chatId) ?? []
+        existing.push(messageId)
+        byChatId.set(chatId, existing)
+      }
+
+      // Mark deleted for each chat
+      const now = Date.now()
+      let deletedCount = 0
+      const transaction = db.transaction(() => {
+        for (const [chatId, msgIds] of byChatId) {
+          for (const messageId of msgIds) {
+            stmts.markDeleted.run({
+              $chat_id: chatId,
+              $message_id: messageId,
+              $now: now,
+            })
+            deletedCount++
+          }
+        }
+      })
+      transaction()
+
+      return deletedCount
     },
 
     updateText(

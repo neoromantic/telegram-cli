@@ -159,6 +159,128 @@ describe('MessagesCache', () => {
     })
   })
 
+  describe('findChatIdsByMessageIds', () => {
+    it('returns empty map for empty input', () => {
+      const result = cache.findChatIdsByMessageIds([])
+      expect(result.size).toBe(0)
+    })
+
+    it('returns empty map when no messages found', () => {
+      const result = cache.findChatIdsByMessageIds([1, 2, 3])
+      expect(result.size).toBe(0)
+    })
+
+    it('finds chat IDs for existing messages', () => {
+      // Create messages in different chats
+      cache.upsert({
+        chat_id: 100,
+        message_id: 1,
+        text: 'Message in chat 100',
+        message_type: 'text',
+        date: Date.now(),
+        raw_json: '{}',
+      })
+      cache.upsert({
+        chat_id: 200,
+        message_id: 2,
+        text: 'Message in chat 200',
+        message_type: 'text',
+        date: Date.now(),
+        raw_json: '{}',
+      })
+      cache.upsert({
+        chat_id: 100,
+        message_id: 3,
+        text: 'Another in chat 100',
+        message_type: 'text',
+        date: Date.now(),
+        raw_json: '{}',
+      })
+
+      const result = cache.findChatIdsByMessageIds([1, 2, 3, 999])
+
+      expect(result.size).toBe(3) // 999 not found
+      expect(result.get(1)).toBe(100)
+      expect(result.get(2)).toBe(200)
+      expect(result.get(3)).toBe(100)
+      expect(result.has(999)).toBe(false)
+    })
+  })
+
+  describe('markDeletedByMessageIds', () => {
+    it('returns 0 for empty input', () => {
+      const count = cache.markDeletedByMessageIds([])
+      expect(count).toBe(0)
+    })
+
+    it('returns 0 when no messages found', () => {
+      const count = cache.markDeletedByMessageIds([1, 2, 3])
+      expect(count).toBe(0)
+    })
+
+    it('marks messages as deleted across multiple chats', () => {
+      // Create messages in different chats (simulating DMs and groups)
+      cache.upsert({
+        chat_id: 100,
+        message_id: 1,
+        text: 'DM message',
+        message_type: 'text',
+        date: Date.now(),
+        raw_json: '{}',
+      })
+      cache.upsert({
+        chat_id: 200,
+        message_id: 2,
+        text: 'Group message',
+        message_type: 'text',
+        date: Date.now(),
+        raw_json: '{}',
+      })
+      cache.upsert({
+        chat_id: 100,
+        message_id: 3,
+        text: 'Another DM',
+        message_type: 'text',
+        date: Date.now(),
+        raw_json: '{}',
+      })
+      cache.upsert({
+        chat_id: 300,
+        message_id: 4,
+        text: 'Unaffected message',
+        message_type: 'text',
+        date: Date.now(),
+        raw_json: '{}',
+      })
+
+      // Delete messages 1, 2, and 3 (without knowing their chat IDs)
+      const deletedCount = cache.markDeletedByMessageIds([1, 2, 3])
+
+      expect(deletedCount).toBe(3)
+      expect(cache.get(100, 1)?.is_deleted).toBe(1)
+      expect(cache.get(200, 2)?.is_deleted).toBe(1)
+      expect(cache.get(100, 3)?.is_deleted).toBe(1)
+      expect(cache.get(300, 4)?.is_deleted).toBe(0) // Unaffected
+    })
+
+    it('handles partial matches gracefully', () => {
+      cache.upsert({
+        chat_id: 100,
+        message_id: 5,
+        text: 'Only existing message',
+        message_type: 'text',
+        date: Date.now(),
+        raw_json: '{}',
+      })
+
+      // Try to delete messages where only one exists
+      const deletedCount = cache.markDeletedByMessageIds([5, 999, 1000])
+
+      expect(deletedCount).toBe(1)
+      expect(cache.get(100, 5)?.is_deleted).toBe(1)
+    })
+  })
+
   describe('updateText', () => {
     it('updates message text, sets is_edited flag, and stores edit_date', () => {
       const originalDate = Date.now()
