@@ -287,4 +287,109 @@ describe('ChatSyncStateService', () => {
       expect(state?.last_backward_sync).not.toBeNull()
     })
   })
+
+  describe('resetSyncState', () => {
+    beforeEach(() => {
+      // Create a chat with cursors and progress
+      service.upsert({
+        chat_id: 100,
+        chat_type: 'private',
+        sync_priority: SyncPriority.High,
+        sync_enabled: true,
+        forward_cursor: 1000,
+        backward_cursor: 500,
+      })
+      service.markHistoryComplete(100)
+      service.incrementSyncedMessages(100, 50)
+    })
+
+    it('resets all fields by default', () => {
+      // Verify initial state
+      let state = service.get(100)
+      expect(state?.forward_cursor).toBe(1000)
+      expect(state?.backward_cursor).toBe(500)
+      expect(state?.history_complete).toBe(1)
+      expect(state?.synced_messages).toBe(50)
+
+      // Reset
+      service.resetSyncState(100)
+
+      // Verify reset state
+      state = service.get(100)
+      expect(state?.forward_cursor).toBeNull()
+      expect(state?.backward_cursor).toBeNull()
+      expect(state?.history_complete).toBe(0)
+      expect(state?.synced_messages).toBe(0)
+    })
+
+    it('resets only forward cursor when specified', () => {
+      service.resetSyncState(100, {
+        forward_cursor: true,
+        backward_cursor: false,
+        history_complete: false,
+        synced_messages: false,
+      })
+
+      const state = service.get(100)
+      expect(state?.forward_cursor).toBeNull()
+      expect(state?.backward_cursor).toBe(500)
+      expect(state?.history_complete).toBe(1)
+      expect(state?.synced_messages).toBe(50)
+    })
+
+    it('resets only backward cursor when specified', () => {
+      service.resetSyncState(100, {
+        forward_cursor: false,
+        backward_cursor: true,
+        history_complete: false,
+        synced_messages: false,
+      })
+
+      const state = service.get(100)
+      expect(state?.forward_cursor).toBe(1000)
+      expect(state?.backward_cursor).toBeNull()
+      expect(state?.history_complete).toBe(1)
+      expect(state?.synced_messages).toBe(50)
+    })
+
+    it('resets cursors without affecting history_complete or synced_messages', () => {
+      service.resetSyncState(100, {
+        forward_cursor: true,
+        backward_cursor: true,
+        history_complete: false,
+        synced_messages: false,
+      })
+
+      const state = service.get(100)
+      expect(state?.forward_cursor).toBeNull()
+      expect(state?.backward_cursor).toBeNull()
+      expect(state?.history_complete).toBe(1)
+      expect(state?.synced_messages).toBe(50)
+    })
+
+    it('allows re-syncing after reset (Issue #27)', () => {
+      // This is the main use case: reset cursors to NULL so upsert won't use COALESCE
+      service.resetSyncState(100)
+
+      // Verify cursors are NULL
+      let state = service.get(100)
+      expect(state?.forward_cursor).toBeNull()
+      expect(state?.backward_cursor).toBeNull()
+
+      // Now upsert with new cursor values
+      service.upsert({
+        chat_id: 100,
+        chat_type: 'private',
+        sync_priority: SyncPriority.High,
+        sync_enabled: true,
+        forward_cursor: 2000,
+        backward_cursor: 1500,
+      })
+
+      // Verify new values are set (not the old ones via COALESCE)
+      state = service.get(100)
+      expect(state?.forward_cursor).toBe(2000)
+      expect(state?.backward_cursor).toBe(1500)
+    })
+  })
 })
