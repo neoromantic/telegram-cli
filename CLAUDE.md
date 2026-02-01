@@ -406,7 +406,8 @@ src/
 │   └── index.ts          # TypeScript types
 └── utils/
     ├── output.ts         # JSON/pretty output
-    └── config.ts         # Config loading
+    ├── config.ts         # Config loading
+    └── message-parser.ts # Message parsing and forward attribution
 ```
 
 ---

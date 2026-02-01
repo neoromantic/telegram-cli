@@ -49,7 +49,7 @@ A complete Telegram CLI client for developers and AI agents. Installable via `bu
 - [x] Generic cache service with staleness checking
 - [x] Users cache service (UsersCache)
 - [x] Chats cache service (ChatsCache)
-- [x] Comprehensive tests (877 unit tests total)
+- [x] Comprehensive tests (942 unit tests total)
 
 → [Database Schema](docs/plans/database-schema.md)
 
@@ -77,14 +77,14 @@ A complete Telegram CLI client for developers and AI agents. Installable via `bu
 → [AI Integration](docs/plans/ai-integration.md)
 
 ### Phase 8: Testing & Docs
-- [x] Unit testing setup (877 unit tests)
+- [x] Unit testing setup (942 unit tests)
 - [x] GitHub Actions CI (lint, typecheck, test, build-test)
 - [x] E2E testing setup (80 E2E tests)
   - [x] CLI execution helper (`Bun.spawn`)
   - [x] Test isolation via `TELEGRAM_CLI_DATA_DIR`
   - [x] Help/format/accounts/exit-code tests
 - [x] Build & distribution scripts
-- **Total: 957 tests (877 unit + 80 E2E), ~85% line coverage**
+- **Total: 1022 tests (942 unit + 80 E2E), ~85% line coverage**
 - [ ] Snapshot testing setup
 - [ ] Mock HTTP layer
 - [ ] Integration test suite with TELEGRAM_TEST_ACCOUNT env var
@@ -101,9 +101,32 @@ A complete Telegram CLI client for developers and AI agents. Installable via `bu
 > Comprehensive review of the sync engine, update handlers, daemon, and caching layers.
 > Issues are prioritized P0 (critical) through P3 (enhancement).
 
+### ✅ Recently Fixed (2026-02-02)
+
+The following 16 issues have been resolved:
+
+| Issue | Description | Fix |
+|-------|-------------|-----|
+| #1 | Delete events ignored for DMs/groups | Look up chat from message ID before marking deleted |
+| #2 | Race condition in job acquisition | Atomic job claiming with single UPDATE...RETURNING |
+| #3 | Running jobs never recovered after crash | Reset running jobs to pending on daemon startup |
+| #4 | No error handling in update handlers | Added try-catch with proper error logging |
+| #5 | raw_json never stored | Pass and serialize raw message object |
+| #6 | Backward cursor = 0 infinite loop | Skip backward sync when no valid cursor exists |
+| #7 | edit_date never stored | Added edit_date parameter to updateText() |
+| #9 | Failed jobs never cleaned up | Added cleanupFailed() method |
+| #10 | INSERT OR REPLACE loses created_at | Use ON CONFLICT DO UPDATE to preserve timestamp |
+| #11 | No reconnection after health check failure | Exponential backoff reconnection |
+| #17 | No shutdown timeout | 30-second timeout with force exit |
+| #19 | interBatchDelayMs config never used | Implemented delay between pagination calls |
+| #20 | High priority chats miss initial load | Include high priority in initial load |
+| #25 | Forward from peerChat not handled | Added peerChat handling in message parser |
+| #27 | Cannot reset cursors to NULL | Added resetSyncState() method |
+| docs | CLAUDE.md missing files | Updated file structure section |
+
 ### P0: Critical Issues (Fix Before Production)
 
-#### 1. Delete Events Ignored for DMs and Groups
+#### 1. ✅ FIXED - Delete Events Ignored for DMs and Groups
 **Location:** `src/daemon/daemon.ts:215-225`
 
 **Problem:** The `DeleteMessageUpdate` from mtcute only provides `channelId` which is `null` for non-channel chats. The current implementation skips ALL delete events where `channelId` is null.
@@ -125,7 +148,7 @@ if (chatId === null) {
 
 ---
 
-#### 2. Race Condition in Job Acquisition
+#### 2. ✅ FIXED - Race Condition in Job Acquisition
 **Location:** `src/db/sync-jobs.ts` + `src/daemon/scheduler.ts`
 
 **Problem:** The job claiming sequence is not atomic:
@@ -155,7 +178,7 @@ RETURNING *
 
 ---
 
-#### 3. Running Jobs Never Recovered After Crash
+#### 3. ✅ FIXED - Running Jobs Never Recovered After Crash
 **Location:** `src/daemon/scheduler.ts`
 
 **Problem:** If the daemon crashes while a job has `status = 'running'`:
@@ -174,7 +197,7 @@ WHERE status = 'running'
 
 ---
 
-#### 4. No Error Handling in Update Handlers
+#### 4. ✅ FIXED - No Error Handling in Update Handlers
 **Location:** `src/daemon/handlers.ts`
 
 **Problem:** All handler methods have zero try-catch blocks:
@@ -194,7 +217,7 @@ async handleNewMessage(ctx, data): Promise<void> {
 
 ---
 
-#### 5. `raw_json` Never Stored
+#### 5. ✅ FIXED - `raw_json` Never Stored
 **Location:** `src/daemon/handlers.ts:108`
 
 **Problem:** The `toMessageInput()` function hardcodes empty JSON:
@@ -208,7 +231,7 @@ raw_json: '{}', // TODO: Store actual raw JSON when available
 
 ---
 
-#### 6. Backward Cursor = 0 Causes Infinite Loop
+#### 6. ✅ FIXED - Backward Cursor = 0 Causes Infinite Loop
 **Location:** `src/daemon/sync-worker.ts:969-980`
 
 **Problem:** When `backward_cursor` falls back to 0:
@@ -230,7 +253,7 @@ In Telegram's API, `offsetId: 0` means "start from the latest message", not "sta
 
 ### P1: High Severity Issues
 
-#### 7. `edit_date` Never Stored on Message Edits
+#### 7. ✅ FIXED - `edit_date` Never Stored on Message Edits
 **Location:** `src/db/messages-cache.ts` (`updateText` method)
 
 **Problem:** The `updateText()` method sets `is_edited = 1` but ignores the `edit_date`:
@@ -262,7 +285,7 @@ hasPendingJobForChat(chatId: number, jobType: SyncJobType): boolean {
 
 ---
 
-#### 9. Failed Jobs Never Cleaned Up
+#### 9. ✅ FIXED - Failed Jobs Never Cleaned Up
 **Location:** `src/db/sync-jobs.ts` (`cleanupCompleted`)
 
 **Problem:** Only `completed` jobs are cleaned up:
@@ -277,7 +300,7 @@ DELETE FROM sync_jobs WHERE status = $status AND completed_at < $before
 
 ---
 
-#### 10. `INSERT OR REPLACE` Loses `created_at` Timestamp
+#### 10. ✅ FIXED - `INSERT OR REPLACE` Loses `created_at` Timestamp
 **Location:** `src/db/messages-cache.ts` (`upsert` method)
 
 **Problem:** SQLite's `INSERT OR REPLACE` deletes the existing row and inserts a new one. If `created_at` isn't explicitly provided, it gets the default (current timestamp).
@@ -288,7 +311,7 @@ DELETE FROM sync_jobs WHERE status = $status AND completed_at < $before
 
 ---
 
-#### 11. No Reconnection After Health Check Failure
+#### 11. ✅ FIXED - No Reconnection After Health Check Failure
 **Location:** `src/daemon/daemon.ts:554-569`
 
 **Problem:** When health check fails:
@@ -379,7 +402,7 @@ const result = await executor.execute(job)  // Takes time
 
 ---
 
-#### 17. No Shutdown Timeout
+#### 17. ✅ FIXED - No Shutdown Timeout
 **Location:** `src/daemon/daemon.ts` (cleanup function)
 
 **Problem:** `disconnectAllAccounts()` has no timeout. If an account hangs, daemon never exits.
@@ -402,7 +425,7 @@ const result = await executor.execute(job)  // Takes time
 
 ---
 
-#### 19. `interBatchDelayMs` Config Never Used
+#### 19. ✅ FIXED - `interBatchDelayMs` Config Never Used
 **Location:** `src/daemon/job-executor.ts:48` + `src/daemon/daemon.ts`
 
 **Problem:** Config exists but is never applied. Each job processes one batch, so inter-batch delay should apply between pagination calls.
@@ -413,7 +436,7 @@ const result = await executor.execute(job)  // Takes time
 
 ---
 
-#### 20. High Priority Chats Miss Initial Load
+#### 20. ✅ FIXED - High Priority Chats Miss Initial Load
 **Location:** `src/daemon/scheduler.ts:139-144`
 
 **Problem:**
@@ -474,7 +497,7 @@ while (!state.shutdownRequested) {
 
 ---
 
-#### 25. Forward from `peerChat` Not Handled
+#### 25. ✅ FIXED - Forward from `peerChat` Not Handled
 **Location:** `src/daemon/sync-worker.ts:662-673`
 
 **Problem:** `parseRawMessage` handles `peerUser` and `peerChannel` for forward attribution but not `peerChat`.
@@ -492,7 +515,7 @@ while (!state.shutdownRequested) {
 
 ---
 
-#### 27. Cannot Reset Cursors to NULL
+#### 27. ✅ FIXED - Cannot Reset Cursors to NULL
 **Location:** `src/db/chat-sync-state.ts` (`upsert` uses COALESCE)
 
 **Problem:** `COALESCE(excluded.forward_cursor, chat_sync_state.forward_cursor)` means you cannot explicitly set a cursor back to NULL.
@@ -545,10 +568,10 @@ The daemon has **NO contact synchronization**:
 
 ### 📚 Documentation Updates Needed
 
-| File | Issue |
-|------|-------|
-| `CLAUDE.md` | Missing 9 daemon/db files from file structure |
-| `progress.md` | Test count says 957, ROADMAP says 898 |
+| File | Issue | Status |
+|------|-------|--------|
+| `CLAUDE.md` | Missing 9 daemon/db files from file structure | ✅ Fixed |
+| `progress.md` | Test count discrepancy | ✅ Fixed (now 1022 tests) |
 | `docs/plans/sync-strategy.md` | Implementation phase checkboxes outdated |
 
 **Missing from CLAUDE.md file structure:**

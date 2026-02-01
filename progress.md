@@ -2,7 +2,7 @@
 
 ## Current Status: Phase 5 Complete - Sync System Implementation
 
-**Last updated**: 2026-02-02 (sync system complete)
+**Last updated**: 2026-02-02 (16 technical debt issues fixed)
 
 ## What's Working
 
@@ -27,14 +27,14 @@
 | **Real-time Sync** | ✅ Complete | mtcute event wiring, update processing, cursor management |
 | **Sync Workers** | ✅ Complete | ForwardCatchup, BackwardHistory, InitialLoad jobs |
 | **Job Executor** | ✅ Complete | Rate-limited job execution with flood wait handling |
-| **Unit Tests** | ✅ Complete | 877 tests in `src/__tests__/` |
+| **Unit Tests** | ✅ Complete | 942 tests in `src/__tests__/` |
 | **E2E Tests** | ✅ Complete | 80 tests in `src/__e2e__/` |
 | **CI Pipeline** | ✅ Complete | lint, typecheck, test, build-test |
 | **Build System** | ✅ Complete | Native binary compilation, cross-platform |
 
 ### 📊 Test Coverage
 
-- **957 total tests** (877 unit + 80 E2E)
+- **1022 total tests** (942 unit + 80 E2E)
 - **~85% line coverage**
 - **~80% function coverage**
 
@@ -120,7 +120,7 @@ telegram-cli/
 │   │   ├── job-executor.ts   # Job executor (wraps sync worker)
 │   │   ├── pid-file.ts       # PID file management
 │   │   └── types.ts          # Daemon types
-│   ├── __tests__/            # Unit tests (877 tests)
+│   ├── __tests__/            # Unit tests (942 tests)
 │   └── __e2e__/              # E2E tests (80 tests)
 │       └── helpers/          # CLI runner, test environment
 ├── scripts/
