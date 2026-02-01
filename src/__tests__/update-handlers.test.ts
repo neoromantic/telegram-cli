@@ -3,15 +3,15 @@
  */
 import { Database } from 'bun:sqlite'
 import { beforeEach, describe, expect, it } from 'bun:test'
-import { initCacheSchema } from '../db/schema'
-import { initSyncSchema } from '../db/sync-schema'
-import { createMessagesCache } from '../db/messages-cache'
-import { createChatSyncStateService } from '../db/chat-sync-state'
 import {
+  createUpdateHandlers,
   type UpdateContext,
   type UpdateHandlers,
-  createUpdateHandlers,
 } from '../daemon/handlers'
+import { createChatSyncStateService } from '../db/chat-sync-state'
+import { createMessagesCache } from '../db/messages-cache'
+import { initCacheSchema } from '../db/schema'
+import { initSyncSchema } from '../db/sync-schema'
 
 describe('UpdateHandlers', () => {
   let db: Database

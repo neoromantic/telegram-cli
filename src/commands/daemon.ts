@@ -6,13 +6,14 @@
  *   tg daemon stop                       Stop running daemon
  *   tg daemon status                     Show daemon status
  */
-import { defineCommand } from 'citty'
+
 import { join } from 'node:path'
+import { defineCommand } from 'citty'
 import {
-  DaemonExitCode,
   createDaemon,
   createPidFile,
   type DaemonConfig,
+  DaemonExitCode,
 } from '../daemon'
 import { getCacheDb, getDataDir } from '../db'
 import { createDaemonStatusService } from '../db/daemon-status'
@@ -63,11 +64,7 @@ const startCommand = defineCommand({
     },
   },
   async run({ args }) {
-    const verbosity = args.quiet
-      ? 'quiet'
-      : args.verbose
-        ? 'verbose'
-        : 'normal'
+    const verbosity = args.quiet ? 'quiet' : args.verbose ? 'verbose' : 'normal'
 
     const config: Partial<DaemonConfig> = {
       verbosity,

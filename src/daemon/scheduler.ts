@@ -6,7 +6,12 @@ import type { Database } from 'bun:sqlite'
 import type { ChatSyncStateService } from '../db/chat-sync-state'
 import type { MessagesCache } from '../db/messages-cache'
 import type { SyncJobsService } from '../db/sync-jobs'
-import { SyncJobRow, SyncJobStatus, SyncJobType, SyncPriority } from '../db/sync-schema'
+import {
+  type SyncJobRow,
+  SyncJobStatus,
+  SyncJobType,
+  SyncPriority,
+} from '../db/sync-schema'
 
 /**
  * Scheduler status
@@ -65,13 +70,17 @@ export interface SyncSchedulerOptions {
 /**
  * Create sync scheduler
  */
-export function createSyncScheduler(options: SyncSchedulerOptions): SyncScheduler {
+export function createSyncScheduler(
+  options: SyncSchedulerOptions,
+): SyncScheduler {
   const { jobsService, chatSyncState } = options
 
   return {
     queueForwardCatchup(chatId: number): void {
       // Check if there's already a pending catchup job
-      if (jobsService.hasPendingJobForChat(chatId, SyncJobType.ForwardCatchup)) {
+      if (
+        jobsService.hasPendingJobForChat(chatId, SyncJobType.ForwardCatchup)
+      ) {
         return
       }
 
@@ -91,7 +100,9 @@ export function createSyncScheduler(options: SyncSchedulerOptions): SyncSchedule
       }
 
       // Check if there's already a pending history job
-      if (jobsService.hasPendingJobForChat(chatId, SyncJobType.BackwardHistory)) {
+      if (
+        jobsService.hasPendingJobForChat(chatId, SyncJobType.BackwardHistory)
+      ) {
         return
       }
 
@@ -162,7 +173,11 @@ export function createSyncScheduler(options: SyncSchedulerOptions): SyncSchedule
       jobsService.markFailed(jobId, errorMessage)
     },
 
-    updateProgress(jobId: number, messagesFetched: number, cursor?: number): void {
+    updateProgress(
+      jobId: number,
+      messagesFetched: number,
+      cursor?: number,
+    ): void {
       jobsService.updateProgress(jobId, {
         messages_fetched: messagesFetched,
         cursor_end: cursor,

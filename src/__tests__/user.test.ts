@@ -534,7 +534,6 @@ describe('userCommand - by username', () => {
   const cacheConfig = getDefaultCacheConfig()
 
   beforeEach(() => {
-
     const { db } = createTestCacheDatabase()
     testCacheDb = db
     usersCache = createUsersCache(db)
@@ -772,7 +771,6 @@ describe('userCommand - by ID', () => {
   let usersCache: UsersCache
 
   beforeEach(() => {
-
     const { db } = createTestCacheDatabase()
     testCacheDb = db
     usersCache = createUsersCache(db)
@@ -920,7 +918,6 @@ describe('userCommand - by phone', () => {
   let usersCache: UsersCache
 
   beforeEach(() => {
-
     const { db } = createTestCacheDatabase()
     testCacheDb = db
     usersCache = createUsersCache(db)
@@ -1110,7 +1107,6 @@ describe('Cache vs API behavior', () => {
   const cacheConfig = getDefaultCacheConfig()
 
   beforeEach(() => {
-
     const { db } = createTestCacheDatabase()
     testCacheDb = db
     usersCache = createUsersCache(db)
@@ -1417,7 +1413,6 @@ describe('Edge cases', () => {
   let usersCache: UsersCache
 
   beforeEach(() => {
-
     const { db } = createTestCacheDatabase()
     testCacheDb = db
     usersCache = createUsersCache(db)

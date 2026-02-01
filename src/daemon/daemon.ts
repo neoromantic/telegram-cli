@@ -2,8 +2,9 @@
  * Main daemon implementation
  * Manages Telegram connections, real-time updates, and background sync
  */
-import { TelegramClient } from '@mtcute/bun'
+
 import { join } from 'node:path'
+import { TelegramClient } from '@mtcute/bun'
 import {
   type AccountsDbInterface,
   accountsDb as defaultAccountsDb,

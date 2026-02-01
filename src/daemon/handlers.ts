@@ -4,7 +4,7 @@
  */
 import type { Database } from 'bun:sqlite'
 import type { ChatSyncStateService } from '../db/chat-sync-state'
-import type { MessagesCache, MessageInput } from '../db/messages-cache'
+import type { MessageInput, MessagesCache } from '../db/messages-cache'
 import { determineSyncPolicy, type SyncChatType } from '../db/sync-schema'
 
 /**
@@ -61,9 +61,15 @@ export interface UpdateHandlers {
   /** Handle a message edit */
   handleEditMessage(_ctx: UpdateContext, data: EditMessageData): Promise<void>
   /** Handle message deletions */
-  handleDeleteMessages(_ctx: UpdateContext, data: DeleteMessagesData): Promise<void>
+  handleDeleteMessages(
+    _ctx: UpdateContext,
+    data: DeleteMessagesData,
+  ): Promise<void>
   /** Handle a batch of messages (for history sync) */
-  handleBatchMessages(_ctx: UpdateContext, messages: NewMessageData[]): Promise<void>
+  handleBatchMessages(
+    _ctx: UpdateContext,
+    messages: NewMessageData[],
+  ): Promise<void>
 }
 
 /**
@@ -78,7 +84,9 @@ export interface UpdateHandlersOptions {
 /**
  * Create update handlers
  */
-export function createUpdateHandlers(options: UpdateHandlersOptions): UpdateHandlers {
+export function createUpdateHandlers(
+  options: UpdateHandlersOptions,
+): UpdateHandlers {
   const { messagesCache, chatSyncState } = options
 
   /**
@@ -104,7 +112,10 @@ export function createUpdateHandlers(options: UpdateHandlersOptions): UpdateHand
   /**
    * Ensure sync state exists for a chat
    */
-  function ensureSyncState(chatId: number, chatType: SyncChatType = 'private'): void {
+  function ensureSyncState(
+    chatId: number,
+    chatType: SyncChatType = 'private',
+  ): void {
     const existing = chatSyncState.get(chatId)
     if (!existing) {
       const policy = determineSyncPolicy(chatType)
@@ -122,13 +133,19 @@ export function createUpdateHandlers(options: UpdateHandlersOptions): UpdateHand
    */
   function updateForwardCursor(chatId: number, messageId: number): void {
     const state = chatSyncState.get(chatId)
-    if (state && (state.forward_cursor === null || messageId > state.forward_cursor)) {
+    if (
+      state &&
+      (state.forward_cursor === null || messageId > state.forward_cursor)
+    ) {
       chatSyncState.updateCursors(chatId, { forward_cursor: messageId })
     }
   }
 
   return {
-    async handleNewMessage(__ctx: UpdateContext, data: NewMessageData): Promise<void> {
+    async handleNewMessage(
+      __ctx: UpdateContext,
+      data: NewMessageData,
+    ): Promise<void> {
       // Ensure sync state exists
       ensureSyncState(data.chatId)
 
@@ -146,17 +163,26 @@ export function createUpdateHandlers(options: UpdateHandlersOptions): UpdateHand
       chatSyncState.updateLastSync(data.chatId, 'forward')
     },
 
-    async handleEditMessage(_ctx: UpdateContext, data: EditMessageData): Promise<void> {
+    async handleEditMessage(
+      _ctx: UpdateContext,
+      data: EditMessageData,
+    ): Promise<void> {
       // Update message text
       messagesCache.updateText(data.chatId, data.messageId, data.newText)
     },
 
-    async handleDeleteMessages(_ctx: UpdateContext, data: DeleteMessagesData): Promise<void> {
+    async handleDeleteMessages(
+      _ctx: UpdateContext,
+      data: DeleteMessagesData,
+    ): Promise<void> {
       // Mark messages as deleted
       messagesCache.markDeleted(data.chatId, data.messageIds)
     },
 
-    async handleBatchMessages(_ctx: UpdateContext, messages: NewMessageData[]): Promise<void> {
+    async handleBatchMessages(
+      _ctx: UpdateContext,
+      messages: NewMessageData[],
+    ): Promise<void> {
       if (messages.length === 0) return
 
       // Group by chat
@@ -179,7 +205,7 @@ export function createUpdateHandlers(options: UpdateHandlersOptions): UpdateHand
         messagesCache.upsertBatch(inputs)
 
         // Find min/max message IDs
-        const messageIds = chatMessages.map(m => m.messageId)
+        const messageIds = chatMessages.map((m) => m.messageId)
         const maxId = Math.max(...messageIds)
         const minId = Math.min(...messageIds)
 

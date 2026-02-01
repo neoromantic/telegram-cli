@@ -3,15 +3,17 @@
  */
 import { Database } from 'bun:sqlite'
 import { beforeEach, describe, expect, it } from 'bun:test'
-import { initCacheSchema } from '../db/schema'
-import { SyncJobStatus, SyncJobType, SyncPriority, initSyncSchema } from '../db/sync-schema'
-import { createSyncJobsService } from '../db/sync-jobs'
+import { createSyncScheduler, type SyncScheduler } from '../daemon/scheduler'
 import { createChatSyncStateService } from '../db/chat-sync-state'
 import { createMessagesCache } from '../db/messages-cache'
+import { initCacheSchema } from '../db/schema'
+import { createSyncJobsService } from '../db/sync-jobs'
 import {
-  type SyncScheduler,
-  createSyncScheduler,
-} from '../daemon/scheduler'
+  initSyncSchema,
+  SyncJobStatus,
+  SyncJobType,
+  SyncPriority,
+} from '../db/sync-schema'
 
 describe('SyncScheduler', () => {
   let db: Database
