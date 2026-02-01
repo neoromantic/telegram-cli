@@ -10,6 +10,11 @@ import type { SyncScheduler } from './scheduler'
 import { DEFAULT_SYNC_DELAYS } from './types'
 
 /**
+ * Default job executor configuration (re-export for compatibility)
+ */
+export const DEFAULT_JOB_EXECUTOR_CONFIG = DEFAULT_SYNC_DELAYS
+
+/**
  * Result of a single batch fetch operation
  */
 export interface BatchResult {

@@ -32,6 +32,7 @@ This directory contains detailed implementation plans for telegram-cli features.
 | Document | Description | Status |
 |----------|-------------|--------|
 | [search.md](./search.md) | FTS5 full-text search | Planning |
+| [sql-command.md](./sql-command.md) | Direct SQL access to cache database | Planning |
 | [groups.md](./groups.md) | Group operations | Planning |
 | [real-time.md](./real-time.md) | Real-time event handlers | Planning |
 | [channel-tags.md](./channel-tags.md) | Channel tagging system | Planning |

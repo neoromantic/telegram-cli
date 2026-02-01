@@ -33,6 +33,7 @@ function initSchema(db: Database): void {
     CREATE TABLE IF NOT EXISTS accounts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       phone TEXT UNIQUE NOT NULL,
+      user_id INTEGER,
       name TEXT,
       session_data TEXT NOT NULL DEFAULT '',
       is_active INTEGER DEFAULT 0,
@@ -41,16 +42,70 @@ function initSchema(db: Database): void {
     )
   `)
 
+  // Migration: add user_id column if it doesn't exist (for existing databases)
+  // Note: SQLite doesn't allow UNIQUE constraint in ALTER TABLE, so we add the column
+  // without it and create a unique index separately
+  try {
+    db.run('ALTER TABLE accounts ADD COLUMN user_id INTEGER')
+  } catch {
+    // Column already exists, ignore
+  }
+
   db.run('CREATE INDEX IF NOT EXISTS idx_accounts_phone ON accounts(phone)')
+  db.run(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_user_id ON accounts(user_id)',
+  )
   db.run(
     'CREATE INDEX IF NOT EXISTS idx_accounts_active ON accounts(is_active)',
   )
+
+  // Migration: extract user_id from "user:xxx" phone values and resolve duplicates
+  migrateAndResolveDuplicates(db)
+}
+
+/**
+ * Extract user_id from "user:xxx" phone patterns and resolve duplicate accounts
+ */
+function migrateAndResolveDuplicates(db: Database): void {
+  // Step 1: Extract user_id from phone values like "user:12345"
+  const accountsWithUserPhone = db
+    .query(
+      "SELECT id, phone FROM accounts WHERE phone LIKE 'user:%' AND user_id IS NULL",
+    )
+    .all() as Array<{ id: number; phone: string }>
+
+  for (const acc of accountsWithUserPhone) {
+    const userId = parseInt(acc.phone.replace('user:', ''), 10)
+    if (!Number.isNaN(userId)) {
+      // Check if this user_id already exists in another account
+      const existing = db
+        .query('SELECT id FROM accounts WHERE user_id = ?')
+        .get(userId) as { id: number } | null
+
+      if (existing) {
+        // Duplicate found! Keep the existing account (with real phone number),
+        // delete the QR-based account (user:xxx phone)
+        db.query('DELETE FROM accounts WHERE id = ?').run(acc.id)
+      } else {
+        // No duplicate, just update the user_id
+        db.query('UPDATE accounts SET user_id = ? WHERE id = ?').run(
+          userId,
+          acc.id,
+        )
+      }
+    }
+  }
+
+  // Step 2: Handle accounts with the same name but no user_id
+  // This is a heuristic for accounts that might be the same user
+  // We don't auto-merge these since name matching is not reliable
 }
 
 /** Account row class for typed queries */
 class AccountRow {
   id!: number
   phone!: string
+  user_id!: number | null
   name!: string | null
   session_data!: string
   is_active!: number
@@ -72,14 +127,17 @@ function createStatements(db: Database) {
     getAccountByPhone: db
       .query('SELECT * FROM accounts WHERE phone = $phone')
       .as(AccountRow),
+    getAccountByUserId: db
+      .query('SELECT * FROM accounts WHERE user_id = $user_id')
+      .as(AccountRow),
     getActiveAccount: db
       .query('SELECT * FROM accounts WHERE is_active = 1 LIMIT 1')
       .as(AccountRow),
 
     insertAccount: db
       .query(`
-      INSERT INTO accounts (phone, name, session_data, is_active)
-      VALUES ($phone, $name, $session_data, $is_active)
+      INSERT INTO accounts (phone, user_id, name, session_data, is_active)
+      VALUES ($phone, $user_id, $name, $session_data, $is_active)
       RETURNING *
     `)
       .as(AccountRow),
@@ -87,7 +145,7 @@ function createStatements(db: Database) {
     updateAccount: db
       .query(`
       UPDATE accounts
-      SET phone = $phone, name = $name, session_data = $session_data, updated_at = CURRENT_TIMESTAMP
+      SET phone = $phone, user_id = $user_id, name = $name, session_data = $session_data, updated_at = CURRENT_TIMESTAMP
       WHERE id = $id
       RETURNING *
     `)
@@ -116,16 +174,23 @@ export interface AccountsDbInterface {
   getAll(): Account[]
   getById(id: number): Account | null
   getByPhone(phone: string): Account | null
+  getByUserId(userId: number): Account | null
   getActive(): Account | null
   create(data: {
     phone: string
+    user_id?: number
     name?: string
     session_data?: string
     is_active?: boolean
   }): Account
   update(
     id: number,
-    data: { phone?: string; name?: string; session_data?: string },
+    data: {
+      phone?: string
+      user_id?: number | null
+      name?: string
+      session_data?: string
+    },
   ): Account | null
   updateSession(id: number, session_data: string): void
   setActive(id: number): void
@@ -155,6 +220,11 @@ export function createAccountsDb(db: Database): AccountsDbInterface {
       return statements.getAccountByPhone.get({ $phone: phone }) ?? null
     },
 
+    /** Get account by Telegram user ID */
+    getByUserId(userId: number): Account | null {
+      return statements.getAccountByUserId.get({ $user_id: userId }) ?? null
+    },
+
     /** Get the currently active account */
     getActive(): Account | null {
       return statements.getActiveAccount.get() ?? null
@@ -163,12 +233,14 @@ export function createAccountsDb(db: Database): AccountsDbInterface {
     /** Create a new account */
     create(data: {
       phone: string
+      user_id?: number
       name?: string
       session_data?: string
       is_active?: boolean
     }): Account {
       const result = statements.insertAccount.get({
         $phone: data.phone,
+        $user_id: data.user_id ?? null,
         $name: data.name ?? null,
         $session_data: data.session_data ?? '',
         $is_active: data.is_active ? 1 : 0,
@@ -180,7 +252,12 @@ export function createAccountsDb(db: Database): AccountsDbInterface {
     /** Update account */
     update(
       id: number,
-      data: { phone?: string; name?: string; session_data?: string },
+      data: {
+        phone?: string
+        user_id?: number | null
+        name?: string
+        session_data?: string
+      },
     ): Account | null {
       const current = this.getById(id)
       if (!current) return null
@@ -189,6 +266,7 @@ export function createAccountsDb(db: Database): AccountsDbInterface {
         statements.updateAccount.get({
           $id: id,
           $phone: data.phone ?? current.phone,
+          $user_id: data.user_id !== undefined ? data.user_id : current.user_id,
           $name: data.name ?? current.name,
           $session_data: data.session_data ?? current.session_data,
         }) ?? null

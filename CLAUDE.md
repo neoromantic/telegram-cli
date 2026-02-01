@@ -378,9 +378,7 @@ src/
 │   ├── api.ts            # generic API command
 │   └── status.ts         # sync status, rate limits
 ├── services/
-│   ├── telegram.ts       # Client manager
-│   ├── cache.ts          # Cache operations
-│   └── sync.ts           # Sync logic
+│   └── telegram.ts       # Client manager
 ├── db/
 │   ├── index.ts          # Database setup and account db
 │   ├── schema.ts         # Base cache schema definitions
@@ -401,6 +399,8 @@ src/
 │   ├── types.ts          # Daemon types and interfaces
 │   ├── handlers.ts       # Telegram update handlers
 │   ├── scheduler.ts      # Sync job scheduler
+│   ├── sync-worker.ts    # Sync worker (processes jobs)
+│   ├── job-executor.ts   # Job executor (wraps sync worker)
 │   └── pid-file.ts       # PID file management
 ├── types/
 │   └── index.ts          # TypeScript types
@@ -554,4 +554,4 @@ Global Options:
 
 ---
 
-*Last updated: 2026-02-02 01:15:00*
+*Last updated: 2026-02-02 01:14:43 (post-compaction)*

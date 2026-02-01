@@ -6,6 +6,7 @@
 export interface Account {
   id: number
   phone: string
+  user_id: number | null
   name: string | null
   session_data: string
   is_active: number
@@ -87,6 +88,11 @@ export const ErrorCodes = {
   DAEMON_SIGNAL_FAILED: 'DAEMON_SIGNAL_FAILED',
   DAEMON_SHUTDOWN_TIMEOUT: 'DAEMON_SHUTDOWN_TIMEOUT',
   DAEMON_FORCE_KILL_FAILED: 'DAEMON_FORCE_KILL_FAILED',
+  // SQL error codes
+  SQL_SYNTAX_ERROR: 'SQL_SYNTAX_ERROR',
+  SQL_TABLE_NOT_FOUND: 'SQL_TABLE_NOT_FOUND',
+  SQL_WRITE_NOT_ALLOWED: 'SQL_WRITE_NOT_ALLOWED',
+  SQL_OPERATION_BLOCKED: 'SQL_OPERATION_BLOCKED',
 } as const
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes]

@@ -19,6 +19,11 @@ export {
 } from './job-executor'
 export { createPidFile, type PidFile, PidFileError } from './pid-file'
 export {
+  createSyncScheduler,
+  type SchedulerStatus,
+  type SyncScheduler,
+} from './scheduler'
+export {
   type DaemonConfig,
   DaemonExitCode,
   type DaemonState,

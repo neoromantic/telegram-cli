@@ -1,7 +1,21 @@
 /**
  * Daemon types and interfaces
  */
-import type { TelegramClient } from '@mtcute/bun'
+import type { DeleteMessageUpdate, Message, TelegramClient } from '@mtcute/bun'
+import type { UpdateHandlers } from './handlers'
+
+/**
+ * Event handler references for cleanup
+ * These are the actual function references registered with mtcute events
+ */
+export interface AccountEventHandlers {
+  /** Handler for new messages */
+  onNewMessage: (msg: Message) => void
+  /** Handler for edited messages */
+  onEditMessage: (msg: Message) => void
+  /** Handler for deleted messages */
+  onDeleteMessage: (update: DeleteMessageUpdate) => void
+}
 
 /**
  * Daemon exit codes
@@ -98,6 +112,10 @@ export interface AccountConnectionState {
   reconnectAttempts?: number
   /** Timestamp when next reconnection attempt should occur */
   nextReconnectAt?: number
+  /** Update handlers for this account */
+  updateHandlers?: UpdateHandlers
+  /** Event handler references for cleanup */
+  eventHandlers?: AccountEventHandlers
 }
 
 /**

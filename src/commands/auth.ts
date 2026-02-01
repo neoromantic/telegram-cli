@@ -154,10 +154,29 @@ export async function loginWithPhone(
       },
     })
 
-    // Update account with user info
-    accountsDb.update(account.id, {
-      name: `${user.firstName}${user.lastName ? ` ${user.lastName}` : ''}`,
-    })
+    // Check if an account with this user_id already exists (to handle duplicates)
+    const existingAccount = accountsDb.getByUserId(user.id)
+    let finalAccount = account
+
+    if (existingAccount && existingAccount.id !== account.id) {
+      // Duplicate found! Merge: keep the existing account, delete the new one
+      // Update existing account with the new phone number and name
+      accountsDb.update(existingAccount.id, {
+        phone,
+        name: `${user.firstName}${user.lastName ? ` ${user.lastName}` : ''}`,
+      })
+      accountsDb.setActive(existingAccount.id)
+
+      // Delete the newly created account
+      accountsDb.delete(account.id)
+      finalAccount = existingAccount
+    } else {
+      // No duplicate, update the current account with user_id and name
+      accountsDb.update(account.id, {
+        user_id: user.id,
+        name: `${user.firstName}${user.lastName ? ` ${user.lastName}` : ''}`,
+      })
+    }
 
     // Close client to allow process to exit
     await (client as any).close()
@@ -165,8 +184,8 @@ export async function loginWithPhone(
     return {
       success: true,
       account: {
-        id: account.id,
-        phone: account.phone,
+        id: finalAccount.id,
+        phone: phone,
         name: user.firstName,
         username: user.username ?? undefined,
       },
@@ -225,11 +244,30 @@ export async function loginWithQr(
       },
     })
 
-    // Update account with user info
-    accountsDb.update(account.id, {
-      phone: `user:${user.id}`, // QR logins don't expose phone number
-      name: `${user.firstName}${user.lastName ? ` ${user.lastName}` : ''}`,
-    })
+    // Check if an account with this user_id already exists (to handle duplicates)
+    const existingAccount = accountsDb.getByUserId(user.id)
+    let finalAccount = account
+
+    if (existingAccount && existingAccount.id !== account.id) {
+      // Duplicate found! Merge: keep the existing account, delete the new one
+      // Update existing account with user info
+      accountsDb.update(existingAccount.id, {
+        user_id: user.id,
+        name: `${user.firstName}${user.lastName ? ` ${user.lastName}` : ''}`,
+      })
+      accountsDb.setActive(existingAccount.id)
+
+      // Delete the newly created account
+      accountsDb.delete(account.id)
+      finalAccount = existingAccount
+    } else {
+      // No duplicate, update the current account with user_id and name
+      accountsDb.update(account.id, {
+        phone: `user:${user.id}`, // QR logins don't expose phone number
+        user_id: user.id,
+        name: `${user.firstName}${user.lastName ? ` ${user.lastName}` : ''}`,
+      })
+    }
 
     // Close client to allow process to exit
     await (client as any).close()
@@ -237,7 +275,7 @@ export async function loginWithQr(
     return {
       success: true,
       account: {
-        id: account.id,
+        id: finalAccount.id,
         name: user.firstName,
         username: user.username ?? undefined,
         userId: user.id,

@@ -59,6 +59,7 @@ describe('Types Module', () => {
       const account: Account = {
         id: 1,
         phone: '+1234567890',
+        user_id: 12345,
         name: 'Test',
         session_data: '',
         is_active: 1,

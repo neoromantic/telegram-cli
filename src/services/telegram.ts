@@ -23,6 +23,7 @@ if (!(globalThis as Record<symbol, boolean>)[timeoutPatchKey]) {
 
 import { join } from 'node:path'
 import { TelegramClient } from '@mtcute/bun'
+import { type FloodWaiterOptions, networkMiddlewares } from '@mtcute/core'
 
 import {
   type AccountsDbInterface,
@@ -50,6 +51,32 @@ export interface TelegramConfig {
   apiId: number
   apiHash: string
   logLevel: number
+  /** FloodWaiter middleware options */
+  floodWaiter?: FloodWaiterOptions
+}
+
+/**
+ * Default FloodWaiter options
+ * - maxRetries: 5 attempts before giving up
+ * - maxWait: 60 seconds max wait time (higher than default 10s for CLI use)
+ * - store: true to remember wait times across requests
+ */
+const DEFAULT_FLOOD_WAITER_OPTIONS: FloodWaiterOptions = {
+  maxRetries: 5,
+  maxWait: 60000, // 60 seconds - CLI users can wait longer
+  store: true,
+  onBeforeWait: (ctx, seconds) => {
+    // Log flood wait unless it's a common method that often triggers it
+    const method = ctx.request._
+    const quietMethods = [
+      'messages.getDialogs',
+      'messages.getHistory',
+      'contacts.getContacts',
+    ]
+    if (!quietMethods.includes(method)) {
+      console.error(`[flood-wait] ${method}: waiting ${seconds}s before retry`)
+    }
+  },
 }
 
 /**
@@ -106,6 +133,10 @@ export function createDefaultClientFactory(
   config: TelegramConfig,
   dataDir?: string,
 ): ClientFactory {
+  // Build middleware stack
+  const floodWaiterOpts = config.floodWaiter ?? DEFAULT_FLOOD_WAITER_OPTIONS
+  const middlewares = [networkMiddlewares.floodWaiter(floodWaiterOpts)]
+
   return {
     create(accountId: number): TelegramClient {
       return new TelegramClient({
@@ -113,6 +144,9 @@ export function createDefaultClientFactory(
         apiHash: config.apiHash,
         storage: getSessionPath(accountId, dataDir),
         logLevel: config.logLevel,
+        network: {
+          middlewares,
+        },
       })
     },
   }

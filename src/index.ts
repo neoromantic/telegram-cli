@@ -12,6 +12,8 @@ import { chatsCommand } from './commands/chats'
 import { contactsCommand } from './commands/contacts'
 import { daemonCommand } from './commands/daemon'
 import { sendCommand } from './commands/send'
+import { sqlCommand } from './commands/sql'
+import { statusCommand } from './commands/status'
 import { meCommand, userCommand } from './commands/user'
 import type { OutputFormat } from './types'
 import { setOutputFormat } from './utils/output'
@@ -58,6 +60,8 @@ const main = defineCommand({
     api: apiCommand,
     me: meCommand,
     user: userCommand,
+    status: statusCommand,
+    sql: sqlCommand,
   },
 })
 
