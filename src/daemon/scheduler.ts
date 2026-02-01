@@ -50,6 +50,8 @@ export interface SyncScheduler {
   cleanup(maxAgeMs?: number): number
   /** Cancel all pending jobs for a chat */
   cancelJobsForChat(chatId: number): number
+  /** Recover jobs that were running when daemon crashed */
+  recoverCrashedJobs(): number
 }
 
 /**
@@ -127,6 +129,9 @@ export function createSyncScheduler(
     },
 
     async initializeForStartup(): Promise<void> {
+      // Recover any jobs that were running when daemon crashed
+      this.recoverCrashedJobs()
+
       // Get all enabled chats
       const enabledChats = chatSyncState.getEnabledChats()
 
@@ -206,6 +211,10 @@ export function createSyncScheduler(
 
     cancelJobsForChat(chatId: number): number {
       return jobsService.cancelPendingForChat(chatId)
+    },
+
+    recoverCrashedJobs(): number {
+      return jobsService.recoverCrashedJobs()
     },
   }
 }
