@@ -236,6 +236,66 @@ describe('SyncScheduler', () => {
       // Disabled chat should not have jobs
       expect(jobsService.getJobsForChat(3).length).toBe(0)
     })
+
+    it('queues initial load for high priority chats with no synced messages', async () => {
+      await scheduler.initializeForStartup()
+
+      // Chat 1 is high priority (private DM) with synced_messages = 0
+      const jobs = jobsService.getJobsForChat(1)
+      const initialLoadJobs = jobs.filter(
+        (j) => j.job_type === SyncJobType.InitialLoad,
+      )
+      expect(initialLoadJobs).toHaveLength(1)
+      expect(initialLoadJobs[0]!.priority).toBe(SyncPriority.High)
+    })
+
+    it('queues initial load for medium priority chats with no synced messages', async () => {
+      await scheduler.initializeForStartup()
+
+      // Chat 2 is medium priority (group) with synced_messages = 0
+      const jobs = jobsService.getJobsForChat(2)
+      const initialLoadJobs = jobs.filter(
+        (j) => j.job_type === SyncJobType.InitialLoad,
+      )
+      expect(initialLoadJobs).toHaveLength(1)
+      expect(initialLoadJobs[0]!.priority).toBe(SyncPriority.Medium)
+    })
+
+    it('does not queue initial load for chats with synced messages', async () => {
+      // Add synced messages to high priority chat
+      chatSyncState.incrementSyncedMessages(1, 5)
+      // Also add a cached message so queueBackwardHistory doesn't trigger ISSUE-6 initial load
+      messagesCache.upsert({
+        chat_id: 1,
+        message_id: 100,
+        message_type: 'text',
+        date: Date.now(),
+        raw_json: '{}',
+      })
+
+      await scheduler.initializeForStartup()
+
+      // Chat 1 has synced messages, should not get initial load
+      const jobs = jobsService.getJobsForChat(1)
+      const initialLoadJobs = jobs.filter(
+        (j) => j.job_type === SyncJobType.InitialLoad,
+      )
+      expect(initialLoadJobs).toHaveLength(0)
+    })
+
+    it('does not queue initial load for chats with complete history', async () => {
+      // Mark high priority chat as history complete
+      chatSyncState.markHistoryComplete(1)
+
+      await scheduler.initializeForStartup()
+
+      // Chat 1 has complete history, should not get initial load
+      const jobs = jobsService.getJobsForChat(1)
+      const initialLoadJobs = jobs.filter(
+        (j) => j.job_type === SyncJobType.InitialLoad,
+      )
+      expect(initialLoadJobs).toHaveLength(0)
+    })
   })
 
   describe('getNextJob', () => {
