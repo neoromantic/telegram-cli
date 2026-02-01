@@ -32,6 +32,8 @@ export interface NewMessageData {
   messageType?: string
   hasMedia?: boolean
   isPinned?: boolean
+  /** Raw message object from Telegram API for future-proofing */
+  rawMessage?: unknown
 }
 
 /**
@@ -105,7 +107,7 @@ export function createUpdateHandlers(
       forward_from_id: data.forwardFromId,
       has_media: data.hasMedia,
       is_pinned: data.isPinned,
-      raw_json: '{}', // TODO: Store actual raw JSON when available
+      raw_json: data.rawMessage ? JSON.stringify(data.rawMessage) : '{}',
     }
   }
 
