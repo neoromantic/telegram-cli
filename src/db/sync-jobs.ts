@@ -58,6 +58,8 @@ export interface SyncJobsService {
   hasPendingJobForChat(chatId: number, jobType: SyncJobType): boolean
   /** Clean up old completed jobs */
   cleanupCompleted(olderThanMs: number): number
+  /** Clean up old failed jobs */
+  cleanupFailed(olderThanMs: number): number
   /** Cancel pending jobs for a chat */
   cancelPendingForChat(chatId: number): number
 }
@@ -140,6 +142,11 @@ export function createSyncJobsService(db: Database): SyncJobsService {
     `),
 
     cleanupCompleted: db.prepare(`
+      DELETE FROM sync_jobs
+      WHERE status = $status AND completed_at < $before
+    `),
+
+    cleanupFailed: db.prepare(`
       DELETE FROM sync_jobs
       WHERE status = $status AND completed_at < $before
     `),
@@ -238,6 +245,15 @@ export function createSyncJobsService(db: Database): SyncJobsService {
       const before = Date.now() - olderThanMs
       const result = stmts.cleanupCompleted.run({
         $status: SyncJobStatus.Completed,
+        $before: before,
+      })
+      return result.changes
+    },
+
+    cleanupFailed(olderThanMs: number): number {
+      const before = Date.now() - olderThanMs
+      const result = stmts.cleanupFailed.run({
+        $status: SyncJobStatus.Failed,
         $before: before,
       })
       return result.changes
