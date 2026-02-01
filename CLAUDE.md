@@ -382,11 +382,26 @@ src/
 │   ├── cache.ts          # Cache operations
 │   └── sync.ts           # Sync logic
 ├── db/
-│   └── index.ts          # Database setup
+│   ├── index.ts          # Database setup and account db
+│   ├── schema.ts         # Base cache schema definitions
+│   ├── types.ts          # Database type definitions
+│   ├── cache.ts          # Cache operations
+│   ├── cache-index.ts    # Cache index utilities
+│   ├── users-cache.ts    # Users cache service
+│   ├── chats-cache.ts    # Chats cache service
+│   ├── messages-cache.ts # Messages cache service
+│   ├── rate-limits.ts    # Rate limit tracking
+│   ├── sync-schema.ts    # Sync system tables (messages, jobs, state)
+│   ├── sync-jobs.ts      # Background sync job queue
+│   ├── chat-sync-state.ts # Per-chat sync state with dual cursors
+│   └── daemon-status.ts  # Daemon status key-value store
 ├── daemon/
-│   ├── index.ts          # Daemon entry
-│   ├── sync.ts           # Sync workers
-│   └── handlers.ts       # Update handlers
+│   ├── index.ts          # Daemon entry point
+│   ├── daemon.ts         # Main daemon implementation
+│   ├── types.ts          # Daemon types and interfaces
+│   ├── handlers.ts       # Telegram update handlers
+│   ├── scheduler.ts      # Sync job scheduler
+│   └── pid-file.ts       # PID file management
 ├── types/
 │   └── index.ts          # TypeScript types
 └── utils/
