@@ -14,7 +14,7 @@ import {
 import { createDaemonStatusService } from '../db/daemon-status'
 import { initSyncSchema } from '../db/sync-schema'
 import { getDefaultConfig, validateConfig } from '../services/telegram'
-import { createPidFile, type PidFile } from './pid-file'
+import { createPidFile } from './pid-file'
 import {
   type AccountConnectionState,
   type DaemonConfig,

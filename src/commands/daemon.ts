@@ -196,7 +196,7 @@ const statusCommand = defineCommand({
           ? new Date(info.lastUpdate).toISOString()
           : null,
       })
-    } catch (err) {
+    } catch (_err) {
       // Database might not be initialized yet
       success({
         status: 'running',

@@ -6,12 +6,7 @@ import type { Database } from 'bun:sqlite'
 import type { ChatSyncStateService } from '../db/chat-sync-state'
 import type { MessagesCache } from '../db/messages-cache'
 import type { SyncJobsService } from '../db/sync-jobs'
-import {
-  type SyncJobRow,
-  SyncJobStatus,
-  SyncJobType,
-  SyncPriority,
-} from '../db/sync-schema'
+import { type SyncJobRow, SyncJobType, SyncPriority } from '../db/sync-schema'
 
 /**
  * Scheduler status
