@@ -133,6 +133,16 @@ export interface DaemonState {
 }
 
 /**
+ * Logger interface for daemon components
+ */
+export interface DaemonLogger {
+  info(message: string): void
+  debug(message: string): void
+  warn(message: string): void
+  error(message: string): void
+}
+
+/**
  * Daemon status for display
  */
 export interface DaemonStatus {
