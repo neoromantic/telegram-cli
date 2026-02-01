@@ -25,6 +25,30 @@ export enum DaemonExitCode {
 export type DaemonVerbosity = 'quiet' | 'normal' | 'verbose'
 
 /**
+ * Reconnection configuration
+ */
+export interface ReconnectConfig {
+  /** Initial delay in milliseconds before first reconnection attempt */
+  initialDelayMs: number
+  /** Maximum delay in milliseconds between reconnection attempts */
+  maxDelayMs: number
+  /** Maximum number of reconnection attempts before giving up */
+  maxAttempts: number
+  /** Multiplier for exponential backoff (e.g., 2 means double the delay each time) */
+  backoffMultiplier: number
+}
+
+/**
+ * Default reconnection configuration
+ */
+export const DEFAULT_RECONNECT_CONFIG: ReconnectConfig = {
+  initialDelayMs: 5000, // 5 seconds
+  maxDelayMs: 300000, // 5 minutes
+  maxAttempts: 10,
+  backoffMultiplier: 2,
+}
+
+/**
  * Daemon configuration
  */
 export interface DaemonConfig {
@@ -34,6 +58,8 @@ export interface DaemonConfig {
   dataDir: string
   /** PID file path */
   pidPath: string
+  /** Reconnection configuration */
+  reconnectConfig?: ReconnectConfig
 }
 
 /**
@@ -47,13 +73,17 @@ export interface AccountConnectionState {
   /** Account display name */
   name: string | null
   /** Connection status */
-  status: 'connecting' | 'connected' | 'disconnected' | 'error'
+  status: 'connecting' | 'connected' | 'disconnected' | 'error' | 'reconnecting'
   /** Last error message */
   lastError?: string
   /** Last activity timestamp */
   lastActivity?: number
   /** Telegram client instance */
   client?: TelegramClient
+  /** Number of reconnection attempts since last successful connection */
+  reconnectAttempts?: number
+  /** Timestamp when next reconnection attempt should occur */
+  nextReconnectAt?: number
 }
 
 /**

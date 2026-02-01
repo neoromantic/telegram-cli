@@ -22,6 +22,8 @@ import {
   type DaemonState,
   type DaemonStatus,
   type DaemonVerbosity,
+  DEFAULT_RECONNECT_CONFIG,
+  type ReconnectConfig,
 } from './types'
 
 /**
@@ -80,6 +82,18 @@ export interface Daemon {
 /**
  * Create daemon instance
  */
+/**
+ * Calculate the delay for the next reconnection attempt using exponential backoff
+ */
+export function calculateReconnectDelay(
+  attemptNumber: number,
+  config: ReconnectConfig = DEFAULT_RECONNECT_CONFIG,
+): number {
+  const delay =
+    config.initialDelayMs * config.backoffMultiplier ** (attemptNumber - 1)
+  return Math.min(delay, config.maxDelayMs)
+}
+
 export function createDaemon(
   config: Partial<DaemonConfig> = {},
   accountsDb: AccountsDbInterface = defaultAccountsDb,
@@ -87,6 +101,7 @@ export function createDaemon(
   const dataDir = config.dataDir ?? getDataDir()
   const pidPath = config.pidPath ?? join(dataDir, 'daemon.pid')
   const verbosity = config.verbosity ?? 'normal'
+  const reconnectConfig = config.reconnectConfig ?? DEFAULT_RECONNECT_CONFIG
 
   const logger = createLogger(verbosity)
   const pidFile = createPidFile(pidPath)
@@ -182,6 +197,106 @@ export function createDaemon(
   }
 
   /**
+   * Schedule a reconnection attempt for an account
+   */
+  function scheduleReconnect(accountState: AccountConnectionState): void {
+    const attempts = (accountState.reconnectAttempts ?? 0) + 1
+    accountState.reconnectAttempts = attempts
+
+    if (attempts > reconnectConfig.maxAttempts) {
+      logger.error(
+        `Account ${accountState.phone} exceeded max reconnection attempts (${reconnectConfig.maxAttempts}). Giving up.`,
+      )
+      return
+    }
+
+    const delay = calculateReconnectDelay(attempts, reconnectConfig)
+    accountState.nextReconnectAt = Date.now() + delay
+
+    logger.info(
+      `Scheduling reconnection for ${accountState.phone} in ${Math.round(delay / 1000)}s (attempt ${attempts}/${reconnectConfig.maxAttempts})`,
+    )
+  }
+
+  /**
+   * Attempt to reconnect an account
+   */
+  async function attemptReconnect(
+    accountState: AccountConnectionState,
+  ): Promise<boolean> {
+    logger.info(
+      `Attempting reconnection for ${accountState.phone} (attempt ${accountState.reconnectAttempts}/${reconnectConfig.maxAttempts})`,
+    )
+
+    accountState.status = 'reconnecting'
+    accountState.nextReconnectAt = undefined
+
+    // Clean up old client if it exists
+    if (accountState.client) {
+      accountState.client = undefined
+    }
+
+    try {
+      const telegramConfig = getDefaultConfig()
+      const validation = validateConfig(telegramConfig)
+      if (!validation.valid) {
+        throw new Error(validation.error)
+      }
+
+      const sessionPath = join(dataDir, `session_${accountState.accountId}.db`)
+      logger.debug(
+        `Reconnecting account ${accountState.phone} (session: ${sessionPath})`,
+      )
+
+      const client = new TelegramClient({
+        apiId: telegramConfig.apiId,
+        apiHash: telegramConfig.apiHash,
+        storage: sessionPath,
+        logLevel: verbosity === 'verbose' ? 5 : 2,
+      })
+
+      await client.start({
+        phone: async () => {
+          throw new Error('Interactive login not supported in daemon mode')
+        },
+        code: async () => {
+          throw new Error('Interactive login not supported in daemon mode')
+        },
+        password: async () => {
+          throw new Error('Interactive login not supported in daemon mode')
+        },
+      })
+
+      // Verify we're authorized
+      const me = await client.getMe()
+      logger.info(
+        `Reconnected account ${accountState.phone} (${me.firstName ?? ''} ${me.lastName ?? ''})`.trim(),
+      )
+
+      accountState.client = client
+      accountState.status = 'connected'
+      accountState.lastActivity = Date.now()
+      accountState.reconnectAttempts = 0 // Reset on successful connection
+      accountState.lastError = undefined
+
+      return true
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err)
+      logger.error(
+        `Reconnection failed for ${accountState.phone}: ${errorMessage}`,
+      )
+
+      accountState.status = 'error'
+      accountState.lastError = errorMessage
+
+      // Schedule next reconnection attempt
+      scheduleReconnect(accountState)
+
+      return false
+    }
+  }
+
+  /**
    * Disconnect all accounts
    */
   async function disconnectAllAccounts(): Promise<void> {
@@ -213,8 +328,11 @@ export function createDaemon(
     // Simple keep-alive loop - in a real implementation, this would
     // process update events from connected clients
     while (!state.shutdownRequested) {
-      // Check connection health
+      const now = Date.now()
+
+      // Check connection health and handle reconnections
       for (const [_, accountState] of state.accounts) {
+        // Check health of connected accounts
         if (accountState.status === 'connected' && accountState.client) {
           try {
             // Ping to check connection (lightweight operation)
@@ -226,7 +344,22 @@ export function createDaemon(
             )
             accountState.status = 'error'
             accountState.lastError = String(err)
+
+            // Schedule reconnection attempt
+            scheduleReconnect(accountState)
           }
+        }
+
+        // Attempt reconnection for accounts in error state when it's time
+        if (
+          accountState.status === 'error' &&
+          accountState.nextReconnectAt &&
+          now >= accountState.nextReconnectAt
+        ) {
+          // Don't block the loop - reconnect asynchronously
+          attemptReconnect(accountState).catch((err) => {
+            logger.error(`Unexpected error during reconnection: ${err}`)
+          })
         }
       }
 
