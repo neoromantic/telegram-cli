@@ -6,6 +6,7 @@ import type { Database } from 'bun:sqlite'
 import type { ChatSyncStateService } from '../db/chat-sync-state'
 import type { MessageInput, MessagesCache } from '../db/messages-cache'
 import { determineSyncPolicy, type SyncChatType } from '../db/sync-schema'
+import type { DaemonLogger } from './types'
 
 /**
  * Context for update processing
@@ -79,6 +80,17 @@ export interface UpdateHandlersOptions {
   db: Database
   messagesCache: MessagesCache
   chatSyncState: ChatSyncStateService
+  logger?: DaemonLogger
+}
+
+/**
+ * Default no-op logger for when logging is not needed
+ */
+const noopLogger: DaemonLogger = {
+  info: () => {},
+  debug: () => {},
+  warn: () => {},
+  error: () => {},
 }
 
 /**
@@ -87,7 +99,7 @@ export interface UpdateHandlersOptions {
 export function createUpdateHandlers(
   options: UpdateHandlersOptions,
 ): UpdateHandlers {
-  const { messagesCache, chatSyncState } = options
+  const { messagesCache, chatSyncState, logger = noopLogger } = options
 
   /**
    * Convert new message data to message input
@@ -146,42 +158,66 @@ export function createUpdateHandlers(
       __ctx: UpdateContext,
       data: NewMessageData,
     ): Promise<void> {
-      // Ensure sync state exists
-      ensureSyncState(data.chatId)
+      try {
+        // Ensure sync state exists
+        ensureSyncState(data.chatId)
 
-      // Store message
-      const input = toMessageInput(data)
-      messagesCache.upsert(input)
+        // Store message
+        const input = toMessageInput(data)
+        messagesCache.upsert(input)
 
-      // Update forward cursor
-      updateForwardCursor(data.chatId, data.messageId)
+        // Update forward cursor
+        updateForwardCursor(data.chatId, data.messageId)
 
-      // Increment synced messages count
-      chatSyncState.incrementSyncedMessages(data.chatId, 1)
+        // Increment synced messages count
+        chatSyncState.incrementSyncedMessages(data.chatId, 1)
 
-      // Update last sync timestamp
-      chatSyncState.updateLastSync(data.chatId, 'forward')
+        // Update last sync timestamp
+        chatSyncState.updateLastSync(data.chatId, 'forward')
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err)
+        logger.error(
+          `Failed to handle new message: chatId=${data.chatId}, messageId=${data.messageId}, error=${errorMessage}`,
+        )
+        // Don't re-throw - let daemon continue processing other updates
+      }
     },
 
     async handleEditMessage(
       _ctx: UpdateContext,
       data: EditMessageData,
     ): Promise<void> {
-      // Update message text and edit_date
-      messagesCache.updateText(
-        data.chatId,
-        data.messageId,
-        data.newText,
-        data.editDate,
-      )
+      try {
+        // Update message text and edit_date
+        messagesCache.updateText(
+          data.chatId,
+          data.messageId,
+          data.newText,
+          data.editDate,
+        )
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err)
+        logger.error(
+          `Failed to handle edit message: chatId=${data.chatId}, messageId=${data.messageId}, error=${errorMessage}`,
+        )
+        // Don't re-throw - let daemon continue processing other updates
+      }
     },
 
     async handleDeleteMessages(
       _ctx: UpdateContext,
       data: DeleteMessagesData,
     ): Promise<void> {
-      // Mark messages as deleted
-      messagesCache.markDeleted(data.chatId, data.messageIds)
+      try {
+        // Mark messages as deleted
+        messagesCache.markDeleted(data.chatId, data.messageIds)
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err)
+        logger.error(
+          `Failed to handle delete messages: chatId=${data.chatId}, messageIds=[${data.messageIds.join(',')}], error=${errorMessage}`,
+        )
+        // Don't re-throw - let daemon continue processing other updates
+      }
     },
 
     async handleBatchMessages(
@@ -198,38 +234,50 @@ export function createUpdateHandlers(
         byChatId.set(msg.chatId, existing)
       }
 
-      // Process each chat
+      // Process each chat - continue processing other chats if one fails
       for (const [chatId, chatMessages] of byChatId) {
-        // Ensure sync state exists
-        ensureSyncState(chatId)
+        try {
+          // Ensure sync state exists
+          ensureSyncState(chatId)
 
-        // Convert to message inputs
-        const inputs = chatMessages.map(toMessageInput)
+          // Convert to message inputs
+          const inputs = chatMessages.map(toMessageInput)
 
-        // Batch insert
-        messagesCache.upsertBatch(inputs)
+          // Batch insert
+          messagesCache.upsertBatch(inputs)
 
-        // Find min/max message IDs
-        const messageIds = chatMessages.map((m) => m.messageId)
-        const maxId = Math.max(...messageIds)
-        const minId = Math.min(...messageIds)
+          // Find min/max message IDs
+          const messageIds = chatMessages.map((m) => m.messageId)
+          const maxId = Math.max(...messageIds)
+          const minId = Math.min(...messageIds)
 
-        // Update cursors
-        const state = chatSyncState.get(chatId)
-        if (state) {
-          // Update forward cursor if we have newer messages
-          if (state.forward_cursor === null || maxId > state.forward_cursor) {
-            chatSyncState.updateCursors(chatId, { forward_cursor: maxId })
+          // Update cursors
+          const state = chatSyncState.get(chatId)
+          if (state) {
+            // Update forward cursor if we have newer messages
+            if (state.forward_cursor === null || maxId > state.forward_cursor) {
+              chatSyncState.updateCursors(chatId, { forward_cursor: maxId })
+            }
+
+            // Update backward cursor if we have older messages
+            if (
+              state.backward_cursor === null ||
+              minId < state.backward_cursor
+            ) {
+              chatSyncState.updateCursors(chatId, { backward_cursor: minId })
+            }
           }
 
-          // Update backward cursor if we have older messages
-          if (state.backward_cursor === null || minId < state.backward_cursor) {
-            chatSyncState.updateCursors(chatId, { backward_cursor: minId })
-          }
+          // Update synced count
+          chatSyncState.incrementSyncedMessages(chatId, chatMessages.length)
+        } catch (err) {
+          const errorMessage = err instanceof Error ? err.message : String(err)
+          const messageIds = chatMessages.map((m) => m.messageId)
+          logger.error(
+            `Failed to handle batch messages: chatId=${chatId}, messageCount=${chatMessages.length}, messageIds=[${messageIds.slice(0, 5).join(',')}${messageIds.length > 5 ? '...' : ''}], error=${errorMessage}`,
+          )
+          // Don't re-throw - continue processing other chats
         }
-
-        // Update synced count
-        chatSyncState.incrementSyncedMessages(chatId, chatMessages.length)
       }
     },
   }

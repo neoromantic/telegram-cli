@@ -2,12 +2,13 @@
  * Tests for update handlers
  */
 import { Database } from 'bun:sqlite'
-import { beforeEach, describe, expect, it } from 'bun:test'
+import { beforeEach, describe, expect, it, mock, spyOn } from 'bun:test'
 import {
   createUpdateHandlers,
   type UpdateContext,
   type UpdateHandlers,
 } from '../daemon/handlers'
+import type { DaemonLogger } from '../daemon/types'
 import { createChatSyncStateService } from '../db/chat-sync-state'
 import { createMessagesCache } from '../db/messages-cache'
 import { initCacheSchema } from '../db/schema'
@@ -200,6 +201,327 @@ describe('UpdateHandlers', () => {
       expect(messagesCache.countByChatId(100)).toBe(50)
       expect(messagesCache.get(100, 1)?.text).toBe('Message 1')
       expect(messagesCache.get(100, 50)?.text).toBe('Message 50')
+    })
+  })
+})
+
+describe('UpdateHandlers error handling', () => {
+  let db: Database
+  let messagesCache: ReturnType<typeof createMessagesCache>
+  let chatSyncState: ReturnType<typeof createChatSyncStateService>
+  let mockLogger: DaemonLogger
+  let errorLogs: string[]
+
+  beforeEach(() => {
+    db = new Database(':memory:')
+    initCacheSchema(db)
+    initSyncSchema(db)
+    messagesCache = createMessagesCache(db)
+    chatSyncState = createChatSyncStateService(db)
+    errorLogs = []
+    mockLogger = {
+      info: mock(() => {}),
+      debug: mock(() => {}),
+      warn: mock(() => {}),
+      error: mock((msg: string) => {
+        errorLogs.push(msg)
+      }),
+    }
+  })
+
+  describe('handleNewMessage', () => {
+    it('logs error and continues when database operation fails', async () => {
+      // Create handlers with mock logger
+      const handlers = createUpdateHandlers({
+        db,
+        messagesCache,
+        chatSyncState,
+        logger: mockLogger,
+      })
+
+      // Spy on messagesCache.upsert to throw an error
+      const upsertSpy = spyOn(messagesCache, 'upsert').mockImplementation(
+        () => {
+          throw new Error('Database write failed')
+        },
+      )
+
+      const ctx: UpdateContext = {
+        accountId: 1,
+        receivedAt: Date.now(),
+      }
+
+      // Should NOT throw
+      await handlers.handleNewMessage(ctx, {
+        chatId: 100,
+        messageId: 1,
+        fromId: 123,
+        text: 'Hello',
+        date: Date.now(),
+        isOutgoing: false,
+      })
+
+      // Should have logged the error
+      expect(errorLogs.length).toBe(1)
+      expect(errorLogs[0]).toContain('Failed to handle new message')
+      expect(errorLogs[0]).toContain('chatId=100')
+      expect(errorLogs[0]).toContain('messageId=1')
+      expect(errorLogs[0]).toContain('Database write failed')
+
+      upsertSpy.mockRestore()
+    })
+  })
+
+  describe('handleEditMessage', () => {
+    it('logs error and continues when database operation fails', async () => {
+      const handlers = createUpdateHandlers({
+        db,
+        messagesCache,
+        chatSyncState,
+        logger: mockLogger,
+      })
+
+      const updateTextSpy = spyOn(
+        messagesCache,
+        'updateText',
+      ).mockImplementation(() => {
+        throw new Error('Update failed')
+      })
+
+      const ctx: UpdateContext = {
+        accountId: 1,
+        receivedAt: Date.now(),
+      }
+
+      // Should NOT throw
+      await handlers.handleEditMessage(ctx, {
+        chatId: 200,
+        messageId: 5,
+        newText: 'Edited',
+        editDate: Date.now(),
+      })
+
+      expect(errorLogs.length).toBe(1)
+      expect(errorLogs[0]).toContain('Failed to handle edit message')
+      expect(errorLogs[0]).toContain('chatId=200')
+      expect(errorLogs[0]).toContain('messageId=5')
+      expect(errorLogs[0]).toContain('Update failed')
+
+      updateTextSpy.mockRestore()
+    })
+  })
+
+  describe('handleDeleteMessages', () => {
+    it('logs error and continues when database operation fails', async () => {
+      const handlers = createUpdateHandlers({
+        db,
+        messagesCache,
+        chatSyncState,
+        logger: mockLogger,
+      })
+
+      const markDeletedSpy = spyOn(
+        messagesCache,
+        'markDeleted',
+      ).mockImplementation(() => {
+        throw new Error('Delete failed')
+      })
+
+      const ctx: UpdateContext = {
+        accountId: 1,
+        receivedAt: Date.now(),
+      }
+
+      // Should NOT throw
+      await handlers.handleDeleteMessages(ctx, {
+        chatId: 300,
+        messageIds: [10, 11, 12],
+      })
+
+      expect(errorLogs.length).toBe(1)
+      expect(errorLogs[0]).toContain('Failed to handle delete messages')
+      expect(errorLogs[0]).toContain('chatId=300')
+      expect(errorLogs[0]).toContain('messageIds=[10,11,12]')
+      expect(errorLogs[0]).toContain('Delete failed')
+
+      markDeletedSpy.mockRestore()
+    })
+  })
+
+  describe('handleBatchMessages', () => {
+    it('logs error for failed chat but continues processing other chats', async () => {
+      const handlers = createUpdateHandlers({
+        db,
+        messagesCache,
+        chatSyncState,
+        logger: mockLogger,
+      })
+
+      // Track which chats were processed
+      const processedChats: number[] = []
+      const originalUpsertBatch = messagesCache.upsertBatch.bind(messagesCache)
+
+      // Make upsertBatch fail only for chat 200
+      const upsertBatchSpy = spyOn(
+        messagesCache,
+        'upsertBatch',
+      ).mockImplementation((inputs) => {
+        const chatId = inputs[0]?.chat_id ?? 0
+        processedChats.push(chatId)
+        if (chatId === 200) {
+          throw new Error('Batch insert failed for chat 200')
+        }
+        return originalUpsertBatch(inputs)
+      })
+
+      const ctx: UpdateContext = {
+        accountId: 1,
+        receivedAt: Date.now(),
+      }
+
+      // Messages for two different chats
+      const messages = [
+        {
+          chatId: 100,
+          messageId: 1,
+          fromId: 123,
+          text: 'Chat 100 msg',
+          date: Date.now(),
+          isOutgoing: false,
+        },
+        {
+          chatId: 200,
+          messageId: 1,
+          fromId: 456,
+          text: 'Chat 200 msg',
+          date: Date.now(),
+          isOutgoing: false,
+        },
+        {
+          chatId: 300,
+          messageId: 1,
+          fromId: 789,
+          text: 'Chat 300 msg',
+          date: Date.now(),
+          isOutgoing: false,
+        },
+      ]
+
+      // Should NOT throw
+      await handlers.handleBatchMessages(ctx, messages)
+
+      // All 3 chats should have been attempted
+      expect(processedChats.length).toBe(3)
+
+      // Should have logged an error for chat 200
+      expect(errorLogs.length).toBe(1)
+      expect(errorLogs[0]).toContain('chatId=200')
+      expect(errorLogs[0]).toContain('Batch insert failed for chat 200')
+
+      // Chat 100 should have been successfully stored
+      expect(messagesCache.get(100, 1)?.text).toBe('Chat 100 msg')
+
+      // Chat 300 should have been successfully stored
+      expect(messagesCache.get(300, 1)?.text).toBe('Chat 300 msg')
+
+      upsertBatchSpy.mockRestore()
+    })
+
+    it('logs error with context including messageIds', async () => {
+      const handlers = createUpdateHandlers({
+        db,
+        messagesCache,
+        chatSyncState,
+        logger: mockLogger,
+      })
+
+      const upsertBatchSpy = spyOn(
+        messagesCache,
+        'upsertBatch',
+      ).mockImplementation(() => {
+        throw new Error('Batch failed')
+      })
+
+      const ctx: UpdateContext = {
+        accountId: 1,
+        receivedAt: Date.now(),
+      }
+
+      const messages = [
+        {
+          chatId: 500,
+          messageId: 1,
+          fromId: 123,
+          text: 'Msg 1',
+          date: Date.now(),
+          isOutgoing: false,
+        },
+        {
+          chatId: 500,
+          messageId: 2,
+          fromId: 123,
+          text: 'Msg 2',
+          date: Date.now(),
+          isOutgoing: false,
+        },
+        {
+          chatId: 500,
+          messageId: 3,
+          fromId: 123,
+          text: 'Msg 3',
+          date: Date.now(),
+          isOutgoing: false,
+        },
+      ]
+
+      await handlers.handleBatchMessages(ctx, messages)
+
+      expect(errorLogs.length).toBe(1)
+      expect(errorLogs[0]).toContain('Failed to handle batch messages')
+      expect(errorLogs[0]).toContain('chatId=500')
+      expect(errorLogs[0]).toContain('messageCount=3')
+      expect(errorLogs[0]).toContain('Batch failed')
+
+      upsertBatchSpy.mockRestore()
+    })
+
+    it('truncates long messageId lists in error log', async () => {
+      const handlers = createUpdateHandlers({
+        db,
+        messagesCache,
+        chatSyncState,
+        logger: mockLogger,
+      })
+
+      const upsertBatchSpy = spyOn(
+        messagesCache,
+        'upsertBatch',
+      ).mockImplementation(() => {
+        throw new Error('Batch failed')
+      })
+
+      const ctx: UpdateContext = {
+        accountId: 1,
+        receivedAt: Date.now(),
+      }
+
+      // Create 10 messages - should only log first 5 IDs
+      const messages = Array.from({ length: 10 }, (_, i) => ({
+        chatId: 600,
+        messageId: i + 1,
+        fromId: 123,
+        text: `Msg ${i + 1}`,
+        date: Date.now(),
+        isOutgoing: false,
+      }))
+
+      await handlers.handleBatchMessages(ctx, messages)
+
+      expect(errorLogs.length).toBe(1)
+      expect(errorLogs[0]).toContain('messageIds=[1,2,3,4,5...')
+      expect(errorLogs[0]).not.toContain('messageIds=[1,2,3,4,5,6')
+
+      upsertBatchSpy.mockRestore()
     })
   })
 })
