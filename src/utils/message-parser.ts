@@ -1,0 +1,202 @@
+/**
+ * Message parsing utilities for converting raw Telegram messages
+ * to the internal format used by the sync system
+ */
+
+import type { NewMessageData } from '../daemon/handlers'
+
+/**
+ * Raw Telegram peer types
+ */
+export interface RawPeerUser {
+  _: 'peerUser'
+  userId: number
+}
+
+export interface RawPeerChat {
+  _: 'peerChat'
+  chatId: number
+}
+
+export interface RawPeerChannel {
+  _: 'peerChannel'
+  channelId: number
+}
+
+export type RawPeer = RawPeerUser | RawPeerChat | RawPeerChannel
+
+/**
+ * Raw message forward header from Telegram API
+ */
+export interface RawMessageFwdHeader {
+  _: 'messageFwdHeader'
+  /** Original sender peer (can be user, chat, or channel) */
+  fromId?: RawPeer
+  /** Original sender name (when fromId is hidden) */
+  fromName?: string
+  /** Original channel post ID */
+  channelPost?: number
+  /** Post author signature */
+  postAuthor?: string
+  /** Original message date */
+  date: number
+  /** Saved peer ID for saved messages */
+  savedFromPeer?: RawPeer
+  /** Saved message ID */
+  savedFromMsgId?: number
+}
+
+/**
+ * Raw Telegram message structure (subset of fields we need)
+ */
+export interface RawMessage {
+  _: 'message' | 'messageService' | 'messageEmpty'
+  /** Message ID */
+  id: number
+  /** Peer where the message was sent */
+  peerId: RawPeer
+  /** Sender peer (for groups/channels) */
+  fromId?: RawPeer
+  /** Forward header (present for forwarded messages) */
+  fwdFrom?: RawMessageFwdHeader
+  /** Message text */
+  message?: string
+  /** Message date (Unix timestamp) */
+  date: number
+  /** Whether message is outgoing */
+  out?: boolean
+  /** Reply header */
+  replyTo?: {
+    _: 'messageReplyHeader'
+    replyToMsgId?: number
+  }
+  /** Media content */
+  media?: {
+    _: string
+  }
+  /** Whether message is pinned */
+  pinned?: boolean
+}
+
+/**
+ * Extract peer ID from a raw peer object
+ * Handles peerUser, peerChat, and peerChannel types
+ */
+export function extractPeerId(peer: RawPeer | undefined): number | undefined {
+  if (!peer) return undefined
+
+  switch (peer._) {
+    case 'peerUser':
+      return peer.userId
+    case 'peerChat':
+      return peer.chatId
+    case 'peerChannel':
+      return peer.channelId
+    default:
+      return undefined
+  }
+}
+
+/**
+ * Extract the forward_from_id from a message's forward header
+ * Handles all peer types: peerUser, peerChat, and peerChannel
+ */
+export function extractForwardFromId(
+  fwdFrom: RawMessageFwdHeader | undefined,
+): number | undefined {
+  if (!fwdFrom?.fromId) return undefined
+
+  const { fromId } = fwdFrom
+
+  // Handle peerUser - forwarded from a user
+  if (fromId._ === 'peerUser') {
+    return fromId.userId
+  }
+
+  // Handle peerChat - forwarded from a basic group
+  if (fromId._ === 'peerChat') {
+    return fromId.chatId
+  }
+
+  // Handle peerChannel - forwarded from a channel or supergroup
+  if (fromId._ === 'peerChannel') {
+    return fromId.channelId
+  }
+
+  return undefined
+}
+
+/**
+ * Determine message type from raw message
+ */
+export function determineMessageType(message: RawMessage): string {
+  if (message._ === 'messageService') return 'service'
+  if (message._ === 'messageEmpty') return 'empty'
+
+  if (!message.media) return 'text'
+
+  switch (message.media._) {
+    case 'messageMediaPhoto':
+      return 'photo'
+    case 'messageMediaDocument':
+      return 'document'
+    case 'messageMediaVideo':
+      return 'video'
+    case 'messageMediaAudio':
+      return 'audio'
+    case 'messageMediaVoice':
+      return 'voice'
+    case 'messageMediaVideoNote':
+      return 'video_note'
+    case 'messageMediaSticker':
+      return 'sticker'
+    case 'messageMediaGeo':
+    case 'messageMediaGeoLive':
+      return 'location'
+    case 'messageMediaContact':
+      return 'contact'
+    case 'messageMediaPoll':
+      return 'poll'
+    case 'messageMediaDice':
+      return 'dice'
+    case 'messageMediaWebPage':
+      return 'text' // Web previews are still text messages
+    default:
+      return 'unknown'
+  }
+}
+
+/**
+ * Parse a raw Telegram message into the internal NewMessageData format
+ * Used by sync workers to process messages from the API
+ */
+export function parseRawMessage(
+  raw: RawMessage,
+  chatId: number,
+): NewMessageData {
+  return {
+    chatId,
+    messageId: raw.id,
+    fromId: extractPeerId(raw.fromId),
+    text: raw.message,
+    date: raw.date,
+    isOutgoing: raw.out ?? false,
+    replyToId: raw.replyTo?.replyToMsgId,
+    forwardFromId: extractForwardFromId(raw.fwdFrom),
+    messageType: determineMessageType(raw),
+    hasMedia: !!raw.media,
+    isPinned: raw.pinned,
+  }
+}
+
+/**
+ * Parse a batch of raw messages
+ */
+export function parseRawMessages(
+  messages: RawMessage[],
+  chatId: number,
+): NewMessageData[] {
+  return messages
+    .filter((msg) => msg._ !== 'messageEmpty')
+    .map((msg) => parseRawMessage(msg, chatId))
+}
