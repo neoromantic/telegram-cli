@@ -60,7 +60,21 @@ export interface DaemonConfig {
   pidPath: string
   /** Reconnection configuration */
   reconnectConfig?: ReconnectConfig
+  /** Delay between pagination calls within a single job (ms) */
+  interBatchDelayMs: number
+  /** Delay between different sync jobs (ms) */
+  interJobDelayMs: number
 }
+
+/**
+ * Default sync delay configuration
+ */
+export const DEFAULT_SYNC_DELAYS = {
+  /** Default inter-batch delay: 1 second */
+  interBatchDelayMs: 1000,
+  /** Default inter-job delay: 3 seconds */
+  interJobDelayMs: 3000,
+} as const
 
 /**
  * Account connection state
