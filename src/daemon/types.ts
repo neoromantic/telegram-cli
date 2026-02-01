@@ -64,6 +64,8 @@ export interface DaemonConfig {
   interBatchDelayMs: number
   /** Delay between different sync jobs (ms) */
   interJobDelayMs: number
+  /** Shutdown timeout in milliseconds - force exit if cleanup takes longer */
+  shutdownTimeoutMs?: number
 }
 
 /**
@@ -75,6 +77,11 @@ export const DEFAULT_SYNC_DELAYS = {
   /** Default inter-job delay: 3 seconds */
   interJobDelayMs: 3000,
 } as const
+
+/**
+ * Default shutdown timeout in milliseconds (30 seconds)
+ */
+export const DEFAULT_SHUTDOWN_TIMEOUT_MS = 30000
 
 /**
  * Account connection state
