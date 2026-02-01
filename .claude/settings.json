@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreCompact": [
+      {
+        "matcher": "auto|manual",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/precompact-preserve-state.sh",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}

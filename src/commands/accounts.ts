@@ -1,0 +1,162 @@
+/**
+ * Account management commands
+ */
+import { defineCommand } from 'citty'
+
+import { accountsDb } from '../db'
+import { success, error } from '../utils/output'
+import { ErrorCodes } from '../types'
+
+/**
+ * List all accounts
+ */
+export const listAccountsCommand = defineCommand({
+  meta: {
+    name: 'list',
+    description: 'List all configured accounts',
+  },
+  async run() {
+    const accounts = accountsDb.getAll()
+
+    if (accounts.length === 0) {
+      success({
+        accounts: [],
+        message: 'No accounts configured. Use "tg auth login" to add one.',
+      })
+      return
+    }
+
+    success({
+      accounts: accounts.map(a => ({
+        id: a.id,
+        phone: a.phone,
+        name: a.name,
+        isActive: a.is_active === 1,
+        createdAt: a.created_at,
+      })),
+      total: accounts.length,
+    })
+  },
+})
+
+/**
+ * Switch active account
+ */
+export const switchAccountCommand = defineCommand({
+  meta: {
+    name: 'switch',
+    description: 'Switch the active account',
+  },
+  args: {
+    id: {
+      type: 'string',
+      description: 'Account ID to switch to',
+      required: true,
+    },
+  },
+  async run({ args }) {
+    const accountId = parseInt(args.id, 10)
+    const account = accountsDb.getById(accountId)
+
+    if (!account) {
+      error(ErrorCodes.ACCOUNT_NOT_FOUND, `Account with ID ${accountId} not found`)
+    }
+
+    accountsDb.setActive(accountId)
+
+    success({
+      message: `Switched to account ${accountId}`,
+      account: {
+        id: account.id,
+        phone: account.phone,
+        name: account.name,
+      },
+    })
+  },
+})
+
+/**
+ * Remove an account
+ */
+export const removeAccountCommand = defineCommand({
+  meta: {
+    name: 'remove',
+    description: 'Remove an account',
+  },
+  args: {
+    id: {
+      type: 'string',
+      description: 'Account ID to remove',
+      required: true,
+    },
+  },
+  async run({ args }) {
+    const accountId = parseInt(args.id, 10)
+    const account = accountsDb.getById(accountId)
+
+    if (!account) {
+      error(ErrorCodes.ACCOUNT_NOT_FOUND, `Account with ID ${accountId} not found`)
+    }
+
+    accountsDb.delete(accountId)
+
+    success({
+      message: `Removed account ${accountId}`,
+      removedAccount: {
+        id: account.id,
+        phone: account.phone,
+      },
+    })
+  },
+})
+
+/**
+ * Show account info
+ */
+export const infoAccountCommand = defineCommand({
+  meta: {
+    name: 'info',
+    description: 'Show detailed account information',
+  },
+  args: {
+    id: {
+      type: 'string',
+      description: 'Account ID (uses active account if not specified)',
+    },
+  },
+  async run({ args }) {
+    const accountId = args.id ? parseInt(args.id, 10) : undefined
+    const account = accountId ? accountsDb.getById(accountId) : accountsDb.getActive()
+
+    if (!account) {
+      error(ErrorCodes.ACCOUNT_NOT_FOUND, 'No account found')
+    }
+
+    success({
+      account: {
+        id: account.id,
+        phone: account.phone,
+        name: account.name,
+        isActive: account.is_active === 1,
+        createdAt: account.created_at,
+        updatedAt: account.updated_at,
+      },
+    })
+  },
+})
+
+/**
+ * Accounts subcommand group
+ */
+export const accountsCommand = defineCommand({
+  meta: {
+    name: 'accounts',
+    description: 'Account management commands',
+  },
+  subCommands: {
+    list: listAccountsCommand,
+    switch: switchAccountCommand,
+    remove: removeAccountCommand,
+    info: infoAccountCommand,
+  },
+})

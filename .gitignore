@@ -1,0 +1,57 @@
+# Dependencies
+node_modules/
+
+# Build output
+out/
+dist/
+*.tgz
+
+# Bun
+bun.lockb
+
+# Code coverage
+coverage/
+*.lcov
+
+# Logs
+logs/
+*.log
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Environment variables
+.env
+.env.*.local
+
+# Caches
+.eslintcache
+.cache/
+*.tsbuildinfo
+
+# SQLite databases
+*.db
+*.db-wal
+*.db-shm
+
+# Telegram CLI data directory
+~/.telegram-cli/
+
+# Editor/IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.nvimlog
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Claude Code local files
+.claude/*.local.md
+
+# Test artifacts
+test-results/
+playwright-report/

@@ -1,0 +1,211 @@
+/**
+ * Database module using bun:sqlite
+ * Supports both file-based (production) and in-memory (testing) databases
+ */
+import { Database } from 'bun:sqlite'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
+import { mkdirSync, existsSync } from 'node:fs'
+
+import type { Account } from '../types'
+
+// Database location: ~/.telegram-cli/data.db
+const DATA_DIR = join(homedir(), '.telegram-cli')
+const DB_PATH = join(DATA_DIR, 'data.db')
+
+/**
+ * Initialize database schema
+ */
+function initSchema(db: Database): void {
+  db.run('PRAGMA journal_mode = WAL')
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS accounts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      phone TEXT UNIQUE NOT NULL,
+      name TEXT,
+      session_data TEXT NOT NULL DEFAULT '',
+      is_active INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
+  db.run('CREATE INDEX IF NOT EXISTS idx_accounts_phone ON accounts(phone)')
+  db.run('CREATE INDEX IF NOT EXISTS idx_accounts_active ON accounts(is_active)')
+}
+
+/** Account row class for typed queries */
+class AccountRow {
+  id!: number
+  phone!: string
+  name!: string | null
+  session_data!: string
+  is_active!: number
+  created_at!: string
+  updated_at!: string
+}
+
+/**
+ * Create prepared statements for a database instance
+ */
+function createStatements(db: Database) {
+  return {
+    getAllAccounts: db.query('SELECT * FROM accounts ORDER BY id').as(AccountRow),
+    getAccountById: db.query('SELECT * FROM accounts WHERE id = $id').as(AccountRow),
+    getAccountByPhone: db.query('SELECT * FROM accounts WHERE phone = $phone').as(AccountRow),
+    getActiveAccount: db.query('SELECT * FROM accounts WHERE is_active = 1 LIMIT 1').as(AccountRow),
+
+    insertAccount: db.query(`
+      INSERT INTO accounts (phone, name, session_data, is_active)
+      VALUES ($phone, $name, $session_data, $is_active)
+      RETURNING *
+    `).as(AccountRow),
+
+    updateAccount: db.query(`
+      UPDATE accounts
+      SET phone = $phone, name = $name, session_data = $session_data, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $id
+      RETURNING *
+    `).as(AccountRow),
+
+    updateSessionData: db.query(`
+      UPDATE accounts
+      SET session_data = $session_data, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $id
+    `),
+
+    setActiveAccount: db.query(`
+      UPDATE accounts SET is_active = CASE WHEN id = $id THEN 1 ELSE 0 END
+    `),
+
+    deleteAccount: db.query('DELETE FROM accounts WHERE id = $id'),
+
+    countAccounts: db.query('SELECT COUNT(*) as count FROM accounts'),
+  }
+}
+
+/**
+ * AccountsDb interface for dependency injection
+ */
+export interface AccountsDbInterface {
+  getAll(): Account[]
+  getById(id: number): Account | null
+  getByPhone(phone: string): Account | null
+  getActive(): Account | null
+  create(data: { phone: string; name?: string; session_data?: string; is_active?: boolean }): Account
+  update(id: number, data: { phone?: string; name?: string; session_data?: string }): Account | null
+  updateSession(id: number, session_data: string): void
+  setActive(id: number): void
+  delete(id: number): boolean
+  count(): number
+}
+
+/**
+ * Create an AccountsDb instance for a database
+ */
+export function createAccountsDb(db: Database): AccountsDbInterface {
+  const statements = createStatements(db)
+
+  return {
+    /** Get all accounts */
+    getAll(): Account[] {
+      return statements.getAllAccounts.all()
+    },
+
+    /** Get account by ID */
+    getById(id: number): Account | null {
+      return statements.getAccountById.get({ $id: id }) ?? null
+    },
+
+    /** Get account by phone number */
+    getByPhone(phone: string): Account | null {
+      return statements.getAccountByPhone.get({ $phone: phone }) ?? null
+    },
+
+    /** Get the currently active account */
+    getActive(): Account | null {
+      return statements.getActiveAccount.get() ?? null
+    },
+
+    /** Create a new account */
+    create(data: { phone: string; name?: string; session_data?: string; is_active?: boolean }): Account {
+      const result = statements.insertAccount.get({
+        $phone: data.phone,
+        $name: data.name ?? null,
+        $session_data: data.session_data ?? '',
+        $is_active: data.is_active ? 1 : 0,
+      })
+      if (!result) throw new Error('Failed to create account')
+      return result
+    },
+
+    /** Update account */
+    update(id: number, data: { phone?: string; name?: string; session_data?: string }): Account | null {
+      const current = this.getById(id)
+      if (!current) return null
+
+      return statements.updateAccount.get({
+        $id: id,
+        $phone: data.phone ?? current.phone,
+        $name: data.name ?? current.name,
+        $session_data: data.session_data ?? current.session_data,
+      }) ?? null
+    },
+
+    /** Update just the session data */
+    updateSession(id: number, session_data: string): void {
+      statements.updateSessionData.run({ $id: id, $session_data: session_data })
+    },
+
+    /** Set an account as active (deactivates all others) */
+    setActive(id: number): void {
+      statements.setActiveAccount.run({ $id: id })
+    },
+
+    /** Delete an account */
+    delete(id: number): boolean {
+      const result = statements.deleteAccount.run({ $id: id })
+      return result.changes > 0
+    },
+
+    /** Count total accounts */
+    count(): number {
+      const result = statements.countAccounts.get() as { count: number } | null
+      return result?.count ?? 0
+    },
+  }
+}
+
+/**
+ * Create an in-memory database for testing
+ */
+export function createTestDatabase(): { db: Database; accountsDb: AccountsDbInterface } {
+  const db = new Database(':memory:')
+  initSchema(db)
+  return { db, accountsDb: createAccountsDb(db) }
+}
+
+// Ensure data directory exists for production
+if (!existsSync(DATA_DIR)) {
+  mkdirSync(DATA_DIR, { recursive: true })
+}
+
+// Production database instance
+const db = new Database(DB_PATH)
+initSchema(db)
+
+// Production accountsDb instance
+export const accountsDb = createAccountsDb(db)
+
+/** Get database path for debugging */
+export function getDatabasePath(): string {
+  return DB_PATH
+}
+
+/** Get data directory path */
+export function getDataDir(): string {
+  return DATA_DIR
+}
+
+export { db }
