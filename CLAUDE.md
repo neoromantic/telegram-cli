@@ -9,12 +9,48 @@ bun run src/index.ts <command>
 # Run tests
 bun test
 
-# Type check
-bun run tsc --noEmit
+# Type check (fast, using tsgo)
+bun run typecheck
 
-# Lint
-bun run biome check .
+# Type check (fallback to tsc if tsgo has issues)
+bun run typecheck:tsc
+
+# Lint (check only)
+bun run lint
+
+# Lint and auto-fix
+bun run lint:fix
+
+# Format
+bun run format
 ```
+
+---
+
+## Git Hooks (Automated)
+
+Pre-commit hooks run automatically via **lefthook**:
+1. `bun run lint:fix` — Auto-fixes linting issues
+2. `bun run typecheck` — Type checks with tsgo
+
+If hooks fail, fix the errors and commit again. To skip hooks (emergency only):
+```bash
+git commit --no-verify -m "message"
+```
+
+---
+
+## CI Pipeline
+
+GitHub Actions runs on every push to `main` and on all PRs:
+
+| Job | What it does | Timeout |
+|-----|--------------|---------|
+| **lint** | `bun run lint` (Biome) | 5 min |
+| **typecheck** | `bun run typecheck:tsc` | 5 min |
+| **test** | `bun test` | 10 min |
+
+All jobs run in parallel with Bun dependency caching. See `.github/workflows/ci.yml`.
 
 ---
 
@@ -23,6 +59,8 @@ bun run biome check .
 ### Documentation
 - **Update docs/plans/*.md** when implementing features
 - **Update ROADMAP.md** when completing phases
+- **Update CLAUDE.md Tech Stack table** when adding/changing dev tools (linters, typecheckers, CI, git hooks, etc.)
+- **Update CLAUDE.md sections** when adding infrastructure (CI pipelines, git hooks, deployment configs)
 - **Never implement without reading the relevant plan first**
 
 ### Architecture
@@ -50,6 +88,9 @@ bun run biome check .
 | CLI | Citty | TypeScript-first, ES modules, lightweight |
 | Database | bun:sqlite | Native, zero deps, WAL mode |
 | Linting | Biome | Fast, all-in-one |
+| Type Checker | tsgo | 10x faster than tsc, Go-based |
+| Git Hooks | lefthook | Simple, parallel execution |
+| CI | GitHub Actions | Lint, typecheck, test on PRs and main |
 
 ---
 
