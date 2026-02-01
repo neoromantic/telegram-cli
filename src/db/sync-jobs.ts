@@ -62,6 +62,8 @@ export interface SyncJobsService {
   cleanupFailed(olderThanMs: number): number
   /** Cancel pending jobs for a chat */
   cancelPendingForChat(chatId: number): number
+  /** Recover jobs that were running when daemon crashed (reset to pending) */
+  recoverCrashedJobs(): number
 }
 
 /**
@@ -154,6 +156,12 @@ export function createSyncJobsService(db: Database): SyncJobsService {
     cancelPendingForChat: db.prepare(`
       DELETE FROM sync_jobs
       WHERE chat_id = $chat_id AND status = $status
+    `),
+
+    recoverCrashedJobs: db.prepare(`
+      UPDATE sync_jobs
+      SET status = $newStatus, error_message = $error
+      WHERE status = $oldStatus
     `),
 
     getLastInsertId: db.query(`SELECT last_insert_rowid() as id`),
@@ -263,6 +271,15 @@ export function createSyncJobsService(db: Database): SyncJobsService {
       const result = stmts.cancelPendingForChat.run({
         $chat_id: chatId,
         $status: SyncJobStatus.Pending,
+      })
+      return result.changes
+    },
+
+    recoverCrashedJobs(): number {
+      const result = stmts.recoverCrashedJobs.run({
+        $oldStatus: SyncJobStatus.Running,
+        $newStatus: SyncJobStatus.Pending,
+        $error: 'Daemon crashed during execution',
       })
       return result.changes
     },

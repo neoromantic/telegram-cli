@@ -427,4 +427,85 @@ describe('SyncJobsService', () => {
       expect(service.getById(job3.id)).not.toBeNull()
     })
   })
+
+  describe('recoverCrashedJobs', () => {
+    it('resets running jobs to pending after daemon crash', () => {
+      const job1 = service.create({
+        chat_id: 100,
+        job_type: SyncJobType.ForwardCatchup,
+        priority: SyncPriority.High,
+      })
+      const job2 = service.create({
+        chat_id: 200,
+        job_type: SyncJobType.BackwardHistory,
+        priority: SyncPriority.Background,
+      })
+      const job3 = service.create({
+        chat_id: 300,
+        job_type: SyncJobType.InitialLoad,
+        priority: SyncPriority.Medium,
+      })
+
+      // Mark some jobs as running (simulating daemon crash mid-execution)
+      service.markRunning(job1.id)
+      service.markRunning(job2.id)
+      // job3 stays pending
+
+      // Recover crashed jobs
+      const recovered = service.recoverCrashedJobs()
+
+      expect(recovered).toBe(2) // Two jobs were running
+
+      // Verify recovered jobs are now pending with error message
+      const recoveredJob1 = service.getById(job1.id)
+      expect(recoveredJob1?.status).toBe(SyncJobStatus.Pending)
+      expect(recoveredJob1?.error_message).toBe(
+        'Daemon crashed during execution',
+      )
+
+      const recoveredJob2 = service.getById(job2.id)
+      expect(recoveredJob2?.status).toBe(SyncJobStatus.Pending)
+      expect(recoveredJob2?.error_message).toBe(
+        'Daemon crashed during execution',
+      )
+
+      // Job that was pending should still be pending
+      const pendingJob = service.getById(job3.id)
+      expect(pendingJob?.status).toBe(SyncJobStatus.Pending)
+      expect(pendingJob?.error_message).toBeNull()
+    })
+
+    it('returns 0 when no running jobs exist', () => {
+      service.create({
+        chat_id: 100,
+        job_type: SyncJobType.ForwardCatchup,
+        priority: SyncPriority.High,
+      })
+
+      const recovered = service.recoverCrashedJobs()
+
+      expect(recovered).toBe(0)
+    })
+
+    it('makes recovered jobs available via getNextPending', () => {
+      const job = service.create({
+        chat_id: 100,
+        job_type: SyncJobType.ForwardCatchup,
+        priority: SyncPriority.High,
+      })
+
+      service.markRunning(job.id)
+
+      // Before recovery, getNextPending should return null (no pending jobs)
+      expect(service.getNextPending()).toBeNull()
+
+      // Recover crashed jobs
+      service.recoverCrashedJobs()
+
+      // Now getNextPending should return the recovered job
+      const nextJob = service.getNextPending()
+      expect(nextJob).not.toBeNull()
+      expect(nextJob?.id).toBe(job.id)
+    })
+  })
 })

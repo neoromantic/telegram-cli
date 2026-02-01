@@ -321,4 +321,72 @@ describe('SyncScheduler', () => {
       expect(status.runningJobs).toBe(1)
     })
   })
+
+  describe('recoverCrashedJobs', () => {
+    it('recovers running jobs from crashed daemon', () => {
+      const job1 = jobsService.create({
+        chat_id: 100,
+        job_type: SyncJobType.ForwardCatchup,
+        priority: SyncPriority.High,
+      })
+      const job2 = jobsService.create({
+        chat_id: 200,
+        job_type: SyncJobType.BackwardHistory,
+        priority: SyncPriority.Background,
+      })
+
+      // Simulate jobs being in running state (daemon crashed)
+      jobsService.markRunning(job1.id)
+      jobsService.markRunning(job2.id)
+
+      // Verify jobs are running
+      expect(jobsService.getRunningJobs()).toHaveLength(2)
+      expect(scheduler.getNextJob()).toBeNull() // No pending jobs
+
+      // Recover crashed jobs
+      const recovered = scheduler.recoverCrashedJobs()
+
+      expect(recovered).toBe(2)
+      expect(jobsService.getRunningJobs()).toHaveLength(0)
+
+      // Now jobs should be available
+      const nextJob = scheduler.getNextJob()
+      expect(nextJob).not.toBeNull()
+    })
+  })
+
+  describe('initializeForStartup with crashed jobs', () => {
+    it('recovers crashed jobs during initialization', async () => {
+      // Create a chat
+      chatSyncState.upsert({
+        chat_id: 100,
+        chat_type: 'private',
+        sync_priority: SyncPriority.High,
+        sync_enabled: true,
+      })
+
+      // Create a job and mark it as running (simulating crash)
+      const crashedJob = jobsService.create({
+        chat_id: 100,
+        job_type: SyncJobType.BackwardHistory,
+        priority: SyncPriority.Background,
+      })
+      jobsService.markRunning(crashedJob.id)
+
+      // Verify job is stuck in running state
+      expect(jobsService.getById(crashedJob.id)?.status).toBe(
+        SyncJobStatus.Running,
+      )
+
+      // Initialize scheduler (should recover crashed job first)
+      await scheduler.initializeForStartup()
+
+      // Verify crashed job was recovered
+      const recoveredJob = jobsService.getById(crashedJob.id)
+      expect(recoveredJob?.status).toBe(SyncJobStatus.Pending)
+      expect(recoveredJob?.error_message).toBe(
+        'Daemon crashed during execution',
+      )
+    })
+  })
 })
