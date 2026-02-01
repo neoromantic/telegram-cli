@@ -160,21 +160,47 @@ describe('MessagesCache', () => {
   })
 
   describe('updateText', () => {
-    it('updates message text and sets is_edited flag', () => {
+    it('updates message text, sets is_edited flag, and stores edit_date', () => {
+      const originalDate = Date.now()
       cache.upsert({
         chat_id: 100,
         message_id: 1,
         text: 'Original text',
         message_type: 'text',
-        date: Date.now(),
+        date: originalDate,
         raw_json: '{}',
       })
 
-      cache.updateText(100, 1, 'Edited text')
+      const editDate = originalDate + 60000 // 1 minute later
+      cache.updateText(100, 1, 'Edited text', editDate)
 
       const msg = cache.get(100, 1)
       expect(msg?.text).toBe('Edited text')
       expect(msg?.is_edited).toBe(1)
+      expect(msg?.edit_date).toBe(editDate)
+    })
+
+    it('stores edit_date on subsequent edits', () => {
+      const originalDate = Date.now()
+      cache.upsert({
+        chat_id: 100,
+        message_id: 1,
+        text: 'Original text',
+        message_type: 'text',
+        date: originalDate,
+        raw_json: '{}',
+      })
+
+      const firstEditDate = originalDate + 60000
+      cache.updateText(100, 1, 'First edit', firstEditDate)
+
+      const secondEditDate = originalDate + 120000
+      cache.updateText(100, 1, 'Second edit', secondEditDate)
+
+      const msg = cache.get(100, 1)
+      expect(msg?.text).toBe('Second edit')
+      expect(msg?.is_edited).toBe(1)
+      expect(msg?.edit_date).toBe(secondEditDate)
     })
   })
 

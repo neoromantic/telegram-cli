@@ -51,7 +51,12 @@ export interface MessagesCache {
   /** Mark messages as deleted */
   markDeleted(chatId: number, messageIds: number[]): void
   /** Update message text (for edits) */
-  updateText(chatId: number, messageId: number, newText: string): void
+  updateText(
+    chatId: number,
+    messageId: number,
+    newText: string,
+    editDate: number,
+  ): void
   /** Get the latest message ID for a chat */
   getLatestMessageId(chatId: number): number | null
   /** Get the oldest message ID for a chat */
@@ -113,7 +118,7 @@ export function createMessagesCache(db: Database): MessagesCache {
 
     updateText: db.prepare(`
       UPDATE messages_cache
-      SET text = $text, is_edited = 1, updated_at = $now
+      SET text = $text, is_edited = 1, edit_date = $edit_date, updated_at = $now
       WHERE chat_id = $chat_id AND message_id = $message_id
     `),
 
@@ -206,11 +211,17 @@ export function createMessagesCache(db: Database): MessagesCache {
       transaction()
     },
 
-    updateText(chatId: number, messageId: number, newText: string): void {
+    updateText(
+      chatId: number,
+      messageId: number,
+      newText: string,
+      editDate: number,
+    ): void {
       stmts.updateText.run({
         $chat_id: chatId,
         $message_id: messageId,
         $text: newText,
+        $edit_date: editDate,
         $now: Date.now(),
       })
     },
