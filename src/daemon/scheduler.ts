@@ -161,7 +161,18 @@ export function createSyncScheduler(
         this.queueForwardCatchup(chat.chat_id)
       }
 
-      // Queue initial load for medium priority chats without history
+      // Queue initial load for high and medium priority chats without history
+      // High priority = DMs and small groups (<20 members)
+      // Medium priority = Medium groups (20-100 members)
+      const highPriorityChats = chatSyncState.getChatsByPriority(
+        SyncPriority.High,
+      )
+      for (const chat of highPriorityChats) {
+        if (!chat.history_complete && chat.synced_messages === 0) {
+          this.queueInitialLoad(chat.chat_id, 10)
+        }
+      }
+
       const mediumChats = chatSyncState.getChatsByPriority(SyncPriority.Medium)
       for (const chat of mediumChats) {
         if (!chat.history_complete && chat.synced_messages === 0) {
