@@ -167,8 +167,13 @@ export function createUpdateHandlers(
       _ctx: UpdateContext,
       data: EditMessageData,
     ): Promise<void> {
-      // Update message text
-      messagesCache.updateText(data.chatId, data.messageId, data.newText)
+      // Update message text and edit_date
+      messagesCache.updateText(
+        data.chatId,
+        data.messageId,
+        data.newText,
+        data.editDate,
+      )
     },
 
     async handleDeleteMessages(
