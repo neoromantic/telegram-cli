@@ -37,6 +37,7 @@ import {
   type DaemonStatus,
   type DaemonVerbosity,
   DEFAULT_RECONNECT_CONFIG,
+  DEFAULT_SHUTDOWN_TIMEOUT_MS,
   type ReconnectConfig,
 } from './types'
 
@@ -116,6 +117,8 @@ export function createDaemon(
   const pidPath = config.pidPath ?? join(dataDir, 'daemon.pid')
   const verbosity = config.verbosity ?? 'normal'
   const reconnectConfig = config.reconnectConfig ?? DEFAULT_RECONNECT_CONFIG
+  const shutdownTimeoutMs =
+    config.shutdownTimeoutMs ?? DEFAULT_SHUTDOWN_TIMEOUT_MS
 
   const logger = createLogger(verbosity)
   const pidFile = createPidFile(pidPath)
@@ -864,28 +867,52 @@ export function createDaemon(
         logger.error(`Main loop error: ${err}`)
       }
 
-      // Cleanup
+      // Cleanup with timeout
       await cleanup()
 
       logger.info('Daemon stopped')
       return DaemonExitCode.Success
 
       async function cleanup() {
-        // Clean up scheduler first
-        cleanupScheduler()
+        const cleanupWork = async () => {
+          // Clean up scheduler first
+          cleanupScheduler()
 
-        await disconnectAllAccounts()
+          await disconnectAllAccounts()
 
-        try {
-          const cacheDb = getCacheDb()
-          const statusService = createDaemonStatusService(cacheDb)
-          statusService.setDaemonStopped()
-        } catch (err) {
-          logger.warn(`Failed to update daemon status on shutdown: ${err}`)
+          try {
+            const cacheDb = getCacheDb()
+            const statusService = createDaemonStatusService(cacheDb)
+            statusService.setDaemonStopped()
+          } catch (err) {
+            logger.warn(`Failed to update daemon status on shutdown: ${err}`)
+          }
+
+          pidFile.release()
+          state.running = false
         }
 
-        pidFile.release()
-        state.running = false
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => {
+            reject(new Error('Shutdown timeout exceeded'))
+          }, shutdownTimeoutMs)
+        })
+
+        try {
+          await Promise.race([cleanupWork(), timeoutPromise])
+        } catch (err) {
+          if (
+            err instanceof Error &&
+            err.message === 'Shutdown timeout exceeded'
+          ) {
+            logger.warn(
+              `Shutdown timeout (${shutdownTimeoutMs}ms) exceeded - forcing exit`,
+            )
+            pidFile.release()
+            process.exit(1)
+          }
+          throw err
+        }
       }
     },
 
