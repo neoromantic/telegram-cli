@@ -331,6 +331,74 @@ describe('SyncJobsService', () => {
     })
   })
 
+  describe('cleanupFailed', () => {
+    it('removes old failed jobs', () => {
+      const job1 = service.create({
+        chat_id: 100,
+        job_type: SyncJobType.ForwardCatchup,
+        priority: SyncPriority.High,
+      })
+      const job2 = service.create({
+        chat_id: 200,
+        job_type: SyncJobType.ForwardCatchup,
+        priority: SyncPriority.High,
+      })
+
+      service.markRunning(job1.id)
+      service.markFailed(job1.id, 'Network error')
+      // job2 stays pending
+
+      // Clean jobs older than -1000ms (effectively all failed jobs)
+      const deleted = service.cleanupFailed(-1000)
+
+      expect(deleted).toBe(1)
+      expect(service.getById(job1.id)).toBeNull()
+      expect(service.getById(job2.id)).not.toBeNull()
+    })
+
+    it('does not remove recent failed jobs', () => {
+      const job = service.create({
+        chat_id: 100,
+        job_type: SyncJobType.ForwardCatchup,
+        priority: SyncPriority.High,
+      })
+
+      service.markRunning(job.id)
+      service.markFailed(job.id, 'Network error')
+
+      // Clean jobs older than 1 hour (our job is newer)
+      const deleted = service.cleanupFailed(60 * 60 * 1000)
+
+      expect(deleted).toBe(0)
+      expect(service.getById(job.id)).not.toBeNull()
+    })
+
+    it('does not affect completed jobs', () => {
+      const job1 = service.create({
+        chat_id: 100,
+        job_type: SyncJobType.ForwardCatchup,
+        priority: SyncPriority.High,
+      })
+      const job2 = service.create({
+        chat_id: 200,
+        job_type: SyncJobType.ForwardCatchup,
+        priority: SyncPriority.High,
+      })
+
+      service.markRunning(job1.id)
+      service.markFailed(job1.id, 'Network error')
+      service.markRunning(job2.id)
+      service.markCompleted(job2.id)
+
+      // Clean all old failed jobs
+      const deleted = service.cleanupFailed(-1000)
+
+      expect(deleted).toBe(1)
+      expect(service.getById(job1.id)).toBeNull() // Failed job removed
+      expect(service.getById(job2.id)).not.toBeNull() // Completed job still exists
+    })
+  })
+
   describe('cancelPendingForChat', () => {
     it('cancels all pending jobs for a chat', () => {
       const job1 = service.create({
