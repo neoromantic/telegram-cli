@@ -32,6 +32,20 @@ export interface UpdateCursorsOptions {
 }
 
 /**
+ * Options for resetting sync state
+ */
+export interface ResetSyncStateOptions {
+  /** Reset forward cursor to NULL (default: true) */
+  forward_cursor?: boolean
+  /** Reset backward cursor to NULL (default: true) */
+  backward_cursor?: boolean
+  /** Reset history_complete to 0 (default: true) */
+  history_complete?: boolean
+  /** Reset synced_messages to 0 (default: true) */
+  synced_messages?: boolean
+}
+
+/**
  * Chat sync state service interface
  */
 export interface ChatSyncStateService {
@@ -57,6 +71,8 @@ export interface ChatSyncStateService {
   updateLastSync(chatId: number, type: 'forward' | 'backward'): void
   /** Enable or disable sync for a chat */
   setSyncEnabled(chatId: number, enabled: boolean): void
+  /** Reset sync state to allow re-syncing (sets cursors to NULL) */
+  resetSyncState(chatId: number, options?: ResetSyncStateOptions): void
 }
 
 /**
@@ -164,6 +180,17 @@ export function createChatSyncStateService(db: Database): ChatSyncStateService {
       SET sync_enabled = $enabled, updated_at = $now
       WHERE chat_id = $chat_id
     `),
+
+    resetSyncState: db.prepare(`
+      UPDATE chat_sync_state
+      SET
+        forward_cursor = CASE WHEN $reset_forward = 1 THEN NULL ELSE forward_cursor END,
+        backward_cursor = CASE WHEN $reset_backward = 1 THEN NULL ELSE backward_cursor END,
+        history_complete = CASE WHEN $reset_history = 1 THEN 0 ELSE history_complete END,
+        synced_messages = CASE WHEN $reset_synced = 1 THEN 0 ELSE synced_messages END,
+        updated_at = $now
+      WHERE chat_id = $chat_id
+    `),
   }
 
   return {
@@ -257,6 +284,24 @@ export function createChatSyncStateService(db: Database): ChatSyncStateService {
       stmts.setSyncEnabled.run({
         $chat_id: chatId,
         $enabled: enabled ? 1 : 0,
+        $now: Date.now(),
+      })
+    },
+
+    resetSyncState(chatId: number, options: ResetSyncStateOptions = {}): void {
+      const {
+        forward_cursor = true,
+        backward_cursor = true,
+        history_complete = true,
+        synced_messages = true,
+      } = options
+
+      stmts.resetSyncState.run({
+        $chat_id: chatId,
+        $reset_forward: forward_cursor ? 1 : 0,
+        $reset_backward: backward_cursor ? 1 : 0,
+        $reset_history: history_complete ? 1 : 0,
+        $reset_synced: synced_messages ? 1 : 0,
         $now: Date.now(),
       })
     },
