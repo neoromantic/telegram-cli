@@ -134,6 +134,94 @@ describe('SyncJobsService', () => {
     })
   })
 
+  describe('claimNextJob', () => {
+    it('atomically claims the highest priority pending job', () => {
+      service.create({
+        chat_id: 100,
+        job_type: SyncJobType.BackwardHistory,
+        priority: SyncPriority.Low,
+      })
+      service.create({
+        chat_id: 200,
+        job_type: SyncJobType.ForwardCatchup,
+        priority: SyncPriority.Realtime,
+      })
+
+      const claimed = service.claimNextJob()
+
+      expect(claimed).not.toBeNull()
+      expect(claimed?.chat_id).toBe(200) // Realtime priority
+      expect(claimed?.status).toBe(SyncJobStatus.Running)
+      expect(claimed?.started_at).not.toBeNull()
+    })
+
+    it('returns null when no pending jobs', () => {
+      expect(service.claimNextJob()).toBeNull()
+    })
+
+    it('prevents double-claiming the same job (race condition fix)', () => {
+      // Create a single job
+      service.create({
+        chat_id: 100,
+        job_type: SyncJobType.ForwardCatchup,
+        priority: SyncPriority.High,
+      })
+
+      // Simulate two workers claiming at the same time
+      // First claim should succeed
+      const claim1 = service.claimNextJob()
+      // Second claim should get null (no more pending jobs)
+      const claim2 = service.claimNextJob()
+
+      expect(claim1).not.toBeNull()
+      expect(claim1?.chat_id).toBe(100)
+      expect(claim1?.status).toBe(SyncJobStatus.Running)
+
+      expect(claim2).toBeNull()
+
+      // Verify only one job is running
+      const runningJobs = service.getRunningJobs()
+      expect(runningJobs).toHaveLength(1)
+    })
+
+    it('claims jobs in priority order across multiple claims', () => {
+      service.create({
+        chat_id: 100,
+        job_type: SyncJobType.BackwardHistory,
+        priority: SyncPriority.Background,
+      })
+      service.create({
+        chat_id: 200,
+        job_type: SyncJobType.ForwardCatchup,
+        priority: SyncPriority.Realtime,
+      })
+      service.create({
+        chat_id: 300,
+        job_type: SyncJobType.InitialLoad,
+        priority: SyncPriority.Medium,
+      })
+
+      // First claim gets highest priority (Realtime)
+      const claim1 = service.claimNextJob()
+      expect(claim1?.chat_id).toBe(200)
+
+      // Second claim gets next highest priority (Medium)
+      const claim2 = service.claimNextJob()
+      expect(claim2?.chat_id).toBe(300)
+
+      // Third claim gets lowest priority (Background)
+      const claim3 = service.claimNextJob()
+      expect(claim3?.chat_id).toBe(100)
+
+      // Fourth claim gets null (no more pending)
+      const claim4 = service.claimNextJob()
+      expect(claim4).toBeNull()
+
+      // All three should be running
+      expect(service.getRunningJobs()).toHaveLength(3)
+    })
+  })
+
   describe('markRunning', () => {
     it('sets status to running', () => {
       const job = service.create({

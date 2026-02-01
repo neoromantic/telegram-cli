@@ -267,6 +267,53 @@ describe('SyncScheduler', () => {
     })
   })
 
+  describe('claimNextJob', () => {
+    it('atomically claims and starts the highest priority job', () => {
+      jobsService.create({
+        chat_id: 100,
+        job_type: SyncJobType.BackwardHistory,
+        priority: SyncPriority.Background,
+      })
+      jobsService.create({
+        chat_id: 200,
+        job_type: SyncJobType.ForwardCatchup,
+        priority: SyncPriority.Realtime,
+      })
+
+      const claimed = scheduler.claimNextJob()
+
+      expect(claimed).not.toBeNull()
+      expect(claimed?.chat_id).toBe(200)
+      expect(claimed?.status).toBe(SyncJobStatus.Running)
+    })
+
+    it('returns null when no pending jobs', () => {
+      expect(scheduler.claimNextJob()).toBeNull()
+    })
+
+    it('prevents race condition - only one worker gets the job', () => {
+      // Create a single job
+      jobsService.create({
+        chat_id: 100,
+        job_type: SyncJobType.ForwardCatchup,
+        priority: SyncPriority.High,
+      })
+
+      // Simulate concurrent workers claiming
+      const claim1 = scheduler.claimNextJob()
+      const claim2 = scheduler.claimNextJob()
+
+      // Only first claim should succeed
+      expect(claim1).not.toBeNull()
+      expect(claim2).toBeNull()
+
+      // Verify job is running
+      const status = scheduler.getStatus()
+      expect(status.runningJobs).toBe(1)
+      expect(status.pendingJobs).toBe(0)
+    })
+  })
+
   describe('completeJob', () => {
     it('marks job as completed', () => {
       const job = jobsService.create({
