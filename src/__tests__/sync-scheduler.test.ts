@@ -71,12 +71,13 @@ describe('SyncScheduler', () => {
   })
 
   describe('queueBackwardHistory', () => {
-    it('queues backward history job for a chat', () => {
+    it('queues backward history job for a chat with existing backward_cursor', () => {
       chatSyncState.upsert({
         chat_id: 100,
         chat_type: 'private',
         sync_priority: SyncPriority.High,
         sync_enabled: true,
+        backward_cursor: 500, // Has an existing cursor
       })
 
       scheduler.queueBackwardHistory(100)
@@ -100,6 +101,87 @@ describe('SyncScheduler', () => {
 
       const jobs = jobsService.getJobsForChat(100)
       expect(jobs).toHaveLength(0)
+    })
+
+    it('queues initial load instead when backward_cursor is null and no cached messages (issue-6 fix)', () => {
+      // Set up chat with no backward cursor (null by default) and no cached messages
+      chatSyncState.upsert({
+        chat_id: 100,
+        chat_type: 'private',
+        sync_priority: SyncPriority.High,
+        sync_enabled: true,
+        // backward_cursor defaults to null
+      })
+
+      // Try to queue backward history - should queue initial load instead
+      scheduler.queueBackwardHistory(100)
+
+      const jobs = jobsService.getJobsForChat(100)
+      expect(jobs).toHaveLength(1)
+      expect(jobs[0]!.job_type).toBe(SyncJobType.InitialLoad)
+      // Should use the chat's sync priority
+      expect(jobs[0]!.priority).toBe(SyncPriority.High)
+    })
+
+    it('queues backward history when backward_cursor is null but cached messages exist (issue-6 fix)', () => {
+      // Set up chat with no backward cursor but WITH cached messages
+      chatSyncState.upsert({
+        chat_id: 100,
+        chat_type: 'private',
+        sync_priority: SyncPriority.High,
+        sync_enabled: true,
+      })
+
+      // Add a cached message
+      messagesCache.upsert({
+        chat_id: 100,
+        message_id: 1000,
+        message_type: 'text',
+        date: Date.now(),
+        raw_json: '{}',
+      })
+
+      // Queue backward history - should work since we have cached messages
+      scheduler.queueBackwardHistory(100)
+
+      const jobs = jobsService.getJobsForChat(100)
+      expect(jobs).toHaveLength(1)
+      expect(jobs[0]!.job_type).toBe(SyncJobType.BackwardHistory)
+    })
+
+    it('queues backward history when backward_cursor exists (issue-6 fix)', () => {
+      // Set up chat WITH a backward cursor
+      chatSyncState.upsert({
+        chat_id: 100,
+        chat_type: 'private',
+        sync_priority: SyncPriority.High,
+        sync_enabled: true,
+        backward_cursor: 500, // Has a valid cursor
+      })
+
+      // Queue backward history - should work since we have a cursor
+      scheduler.queueBackwardHistory(100)
+
+      const jobs = jobsService.getJobsForChat(100)
+      expect(jobs).toHaveLength(1)
+      expect(jobs[0]!.job_type).toBe(SyncJobType.BackwardHistory)
+    })
+
+    it('does not queue duplicate initial load when backward_cursor is null (issue-6 fix)', () => {
+      chatSyncState.upsert({
+        chat_id: 100,
+        chat_type: 'private',
+        sync_priority: SyncPriority.High,
+        sync_enabled: true,
+      })
+
+      // Queue backward history twice - should only create one initial load
+      scheduler.queueBackwardHistory(100)
+      scheduler.queueBackwardHistory(100)
+
+      const jobs = jobsService.getJobsForChat(100)
+      expect(jobs).toHaveLength(1)
+      expect(jobs[0]!.job_type).toBe(SyncJobType.InitialLoad)
     })
   })
 

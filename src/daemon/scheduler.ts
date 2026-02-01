@@ -101,6 +101,27 @@ export function createSyncScheduler(
         return
       }
 
+      // ISSUE-6 FIX: If backward_cursor is null and no cached messages exist,
+      // skip backward sync. Using offsetId: 0 with Telegram API fetches from
+      // latest (not beginning), causing infinite loop. Use initial load instead.
+      if (state?.backward_cursor === null) {
+        const cachedCount = options.messagesCache.countByChatId(chatId)
+        if (cachedCount === 0) {
+          // No cursor and no cached messages - use initial load instead
+          // Queue initial load if not already pending
+          if (
+            !jobsService.hasPendingJobForChat(chatId, SyncJobType.InitialLoad)
+          ) {
+            jobsService.create({
+              chat_id: chatId,
+              job_type: SyncJobType.InitialLoad,
+              priority: state?.sync_priority ?? SyncPriority.Medium,
+            })
+          }
+          return
+        }
+      }
+
       // History sync is background priority (P4)
       jobsService.create({
         chat_id: chatId,
