@@ -41,14 +41,42 @@ tg accounts add --phone +79261408252
 tg accounts switch --id 1
 tg accounts remove --id 1
 
-# Contacts
-tg contacts list [--limit 50] [--offset 0]
-tg contacts search --query "John"
-tg contacts get --id 123
+# Contacts (with caching)
+tg contacts list [--limit 50] [--offset 0] [--fresh]
+tg contacts search --query "John" [--fresh]
+tg contacts get @username [--fresh]
+tg contacts get 123456789 [--fresh]
 
-# Messages (convenience)
-tg send --to @username --text "Hello"
-tg history --chat @username --limit 10
+# Chats/Dialogs (with caching)
+tg chats list [--limit 50] [--type private|group|supergroup|channel] [--fresh]
+tg chats search "query"
+tg chats get @username [--fresh]
+
+# Messaging
+tg send --to @username --message "Hello"
+tg send --to @username -m "Hello" --silent
+tg send --to @username -m "Reply" --reply-to 123
+```
+
+### Cache Behavior
+
+All data-fetching commands support the `--fresh` flag:
+
+```bash
+# Use cached data (default)
+tg contacts list
+
+# Force fresh API fetch
+tg contacts list --fresh
+```
+
+Response always includes cache metadata:
+```json
+{
+  "items": [...],
+  "source": "cache",  // or "api"
+  "stale": false      // true if cache TTL exceeded
+}
 ```
 
 ## Output Modes
@@ -93,6 +121,7 @@ Exit codes:
 - 3: Invalid arguments
 - 4: Network error
 - 5: Telegram API error
+- 6: Account not found
 
 ## Account Context
 
@@ -156,4 +185,62 @@ Nested objects via dot notation:
 ```bash
 tg api messages.sendMessage --peer.username myuser --message Hello
 # → { _: 'messages.sendMessage', peer: { username: 'myuser' }, message: 'Hello' }
+```
+
+### Caching Pattern
+
+Commands that fetch data follow a consistent caching pattern:
+
+```typescript
+// Example from src/commands/contacts.ts
+async run({ args }) {
+  const cacheDb = getCacheDb()  // Lazy initialization
+  const usersCache = createUsersCache(cacheDb)
+  const cacheConfig = getDefaultCacheConfig()
+
+  // Check cache first (unless --fresh)
+  if (!args.fresh) {
+    const cached = usersCache.getByUsername(identifier)
+    if (cached) {
+      const stale = isCacheStale(cached.fetched_at, cacheConfig.staleness.peers)
+      success({ ...cachedData, source: 'cache', stale })
+      return
+    }
+  }
+
+  // Fetch from API
+  const client = getClientForAccount(accountId)
+  const result = await client.call({ _: 'contacts.resolveUsername', username })
+
+  // Cache the result
+  usersCache.upsert(apiUserToCacheInput(result))
+
+  success({ ...freshData, source: 'api', stale: false })
+}
+```
+
+### Peer Resolution with Cache
+
+The send command demonstrates cache-first peer resolution:
+
+```typescript
+// From src/commands/send.ts
+async function resolvePeer(client, identifier, usersCache, chatsCache) {
+  // Check users cache first
+  const cachedUser = usersCache.getByUsername(username)
+  if (cachedUser?.access_hash) {
+    return {
+      inputPeer: { _: 'inputPeerUser', userId: Number(cachedUser.user_id), accessHash: BigInt(cachedUser.access_hash) },
+      name: cachedUser.display_name
+    }
+  }
+
+  // Check chats cache
+  const cachedChat = chatsCache.getByUsername(username)
+  if (cachedChat?.access_hash) { ... }
+
+  // Fall back to API resolution
+  const resolved = await client.call({ _: 'contacts.resolveUsername', username })
+  return { inputPeer: ..., name: ... }
+}
 ```

@@ -1,6 +1,24 @@
 # Contact Management
 
-> **Note:** This document contains inspiration from telegram-mcp-server, not finalized decisions.
+> **Status:** Core functionality implemented. See `src/commands/contacts.ts` for implementation.
+>
+> The contacts command uses `UsersCache` (`src/db/users-cache.ts`) for stale-while-revalidate caching.
+
+## Implementation Summary
+
+**Implemented commands:**
+- `tg contacts list` - List contacts with pagination and caching
+- `tg contacts search` - Search contacts by name/username
+- `tg contacts get` - Get contact by ID or @username
+
+**Caching behavior:**
+- Cache checked first unless `--fresh` flag is used
+- Response includes `source: "cache" | "api"` and `stale: boolean`
+- Stale TTL: 7 days (configurable via `CacheConfig.staleness.peers`)
+
+**Not yet implemented:**
+- Tags and aliases (local metadata enrichment)
+- Notes field
 
 ## Database Schema
 
@@ -232,15 +250,28 @@ upsertUser(user) {
 
 ## CLI Commands
 
+### Implemented
+
 ```bash
+# List contacts (cached by default)
+tg contacts list
+tg contacts list --limit 50 --offset 100
+tg contacts list --fresh  # Force API fetch
+
 # Search contacts
 tg contacts search "query"
-tg contacts search --tag work
+tg contacts search "Alice" --limit 10
+tg contacts search "Alice" --fresh
 
-# Show contact details
-tg contacts show @username
-tg contacts show 123456789
+# Get contact details
+tg contacts get @username
+tg contacts get 123456789
+tg contacts get @username --fresh
+```
 
+### Planned (Not Yet Implemented)
+
+```bash
 # Manage aliases
 tg contacts alias set @username "John from Work"
 tg contacts alias remove @username

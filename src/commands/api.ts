@@ -7,9 +7,9 @@
 import { defineCommand } from 'citty'
 
 import { getClientForAccount } from '../services/telegram'
-import { success, error } from '../utils/output'
-import { mergeArgs } from '../utils/args'
 import { ErrorCodes } from '../types'
+import { mergeArgs } from '../utils/args'
+import { error, success } from '../utils/output'
 
 /**
  * Generic API command
@@ -93,8 +93,8 @@ export const apiCommand = defineCommand({
       const message = err instanceof Error ? err.message : 'Unknown error'
 
       // Try to extract Telegram error code
-      let code = ErrorCodes.TELEGRAM_ERROR
-      let details: Record<string, unknown> = { method }
+      const code = ErrorCodes.TELEGRAM_ERROR
+      const details: Record<string, unknown> = { method }
 
       if (err instanceof Error && 'code' in err) {
         details.telegramErrorCode = (err as any).code

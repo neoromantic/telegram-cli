@@ -4,8 +4,8 @@
 import { defineCommand } from 'citty'
 
 import { accountsDb } from '../db'
-import { success, error } from '../utils/output'
 import { ErrorCodes } from '../types'
+import { error, success } from '../utils/output'
 
 /**
  * List all accounts
@@ -27,7 +27,7 @@ export const listAccountsCommand = defineCommand({
     }
 
     success({
-      accounts: accounts.map(a => ({
+      accounts: accounts.map((a) => ({
         id: a.id,
         phone: a.phone,
         name: a.name,
@@ -59,7 +59,10 @@ export const switchAccountCommand = defineCommand({
     const account = accountsDb.getById(accountId)
 
     if (!account) {
-      error(ErrorCodes.ACCOUNT_NOT_FOUND, `Account with ID ${accountId} not found`)
+      error(
+        ErrorCodes.ACCOUNT_NOT_FOUND,
+        `Account with ID ${accountId} not found`,
+      )
     }
 
     accountsDb.setActive(accountId)
@@ -95,7 +98,10 @@ export const removeAccountCommand = defineCommand({
     const account = accountsDb.getById(accountId)
 
     if (!account) {
-      error(ErrorCodes.ACCOUNT_NOT_FOUND, `Account with ID ${accountId} not found`)
+      error(
+        ErrorCodes.ACCOUNT_NOT_FOUND,
+        `Account with ID ${accountId} not found`,
+      )
     }
 
     accountsDb.delete(accountId)
@@ -126,7 +132,9 @@ export const infoAccountCommand = defineCommand({
   },
   async run({ args }) {
     const accountId = args.id ? parseInt(args.id, 10) : undefined
-    const account = accountId ? accountsDb.getById(accountId) : accountsDb.getActive()
+    const account = accountId
+      ? accountsDb.getById(accountId)
+      : accountsDb.getActive()
 
     if (!account) {
       error(ErrorCodes.ACCOUNT_NOT_FOUND, 'No account found')

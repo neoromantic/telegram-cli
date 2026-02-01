@@ -1,12 +1,13 @@
 /**
  * Test script for QR code login - v2 with better debugging
  */
-import { TelegramClient } from '@mtcute/bun'
-import { join } from 'node:path'
+
 import { homedir } from 'node:os'
-import * as qrcode from 'qrcode-terminal'
-import * as readline from 'node:readline/promises'
+import { join } from 'node:path'
 import { stdin as input, stdout as output } from 'node:process'
+import * as readline from 'node:readline/promises'
+import { TelegramClient } from '@mtcute/bun'
+import * as qrcode from 'qrcode-terminal'
 
 const API_ID = parseInt(process.env.TELEGRAM_API_ID ?? '0', 10)
 const API_HASH = process.env.TELEGRAM_API_HASH ?? ''
@@ -51,7 +52,7 @@ try {
   const user = await client.signInQr({
     onUrlUpdated: (url: string, expires: Date) => {
       console.log('\n--- New QR Code ---')
-      console.log('URL:', url.substring(0, 50) + '...')
+      console.log('URL:', `${url.substring(0, 50)}...`)
       console.log('Scan with: Settings → Devices → Link Desktop Device\n')
 
       // Generate QR code in terminal
@@ -85,11 +86,12 @@ try {
   })
 
   console.log('\n=== SUCCESS ===')
-  console.log(`Logged in as: ${user.firstName}${user.lastName ? ' ' + user.lastName : ''}`)
+  console.log(
+    `Logged in as: ${user.firstName}${user.lastName ? ` ${user.lastName}` : ''}`,
+  )
   console.log(`Username: @${user.username || 'N/A'}`)
   console.log(`User ID: ${user.id}`)
   console.log(`\nSession saved to: ${SESSION_PATH}`)
-
 } catch (error: any) {
   console.error('\n=== ERROR ===')
   console.error('Type:', error.constructor.name)
@@ -115,5 +117,5 @@ try {
 }
 
 // Give time for any cleanup
-await new Promise(r => setTimeout(r, 1000))
+await new Promise((r) => setTimeout(r, 1000))
 process.exit(0)

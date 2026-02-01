@@ -6,7 +6,9 @@
  * Parse named arguments from argv-style array into an object
  * Supports: --key value, --key=value, --nested.key value
  */
-export function parseNamedArgs(args: Record<string, unknown>): Record<string, unknown> {
+export function parseNamedArgs(
+  args: Record<string, unknown>,
+): Record<string, unknown> {
   const result: Record<string, unknown> = {}
 
   for (const [key, value] of Object.entries(args)) {
@@ -27,7 +29,11 @@ export function parseNamedArgs(args: Record<string, unknown>): Record<string, un
 /**
  * Set a value in a nested object structure
  */
-function setNestedValue(obj: Record<string, unknown>, path: string[], value: unknown): void {
+function setNestedValue(
+  obj: Record<string, unknown>,
+  path: string[],
+  value: unknown,
+): void {
   let current = obj
   for (let i = 0; i < path.length - 1; i++) {
     const key = path[i]!
@@ -58,7 +64,10 @@ function parseValue(value: unknown): unknown {
   if (/^-?\d+\.\d+$/.test(value)) return parseFloat(value)
 
   // JSON object/array
-  if ((value.startsWith('{') && value.endsWith('}')) || (value.startsWith('[') && value.endsWith(']'))) {
+  if (
+    (value.startsWith('{') && value.endsWith('}')) ||
+    (value.startsWith('[') && value.endsWith(']'))
+  ) {
     try {
       return JSON.parse(value)
     } catch {
@@ -96,7 +105,10 @@ export function parsePeer(peer: string): string | number {
 /**
  * Merge CLI arguments with JSON input
  */
-export function mergeArgs(cliArgs: Record<string, unknown>, jsonInput?: string): Record<string, unknown> {
+export function mergeArgs(
+  cliArgs: Record<string, unknown>,
+  jsonInput?: string,
+): Record<string, unknown> {
   const parsed = parseNamedArgs(cliArgs)
 
   if (jsonInput) {
@@ -104,7 +116,9 @@ export function mergeArgs(cliArgs: Record<string, unknown>, jsonInput?: string):
       const jsonArgs = JSON.parse(jsonInput)
       return { ...parsed, ...jsonArgs }
     } catch (e) {
-      throw new Error(`Invalid JSON input: ${e instanceof Error ? e.message : 'unknown error'}`)
+      throw new Error(
+        `Invalid JSON input: ${e instanceof Error ? e.message : 'unknown error'}`,
+      )
     }
   }
 

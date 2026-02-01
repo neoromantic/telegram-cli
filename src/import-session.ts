@@ -1,10 +1,11 @@
 /**
  * Import the QR session into the main CLI account system
  */
-import { TelegramClient } from '@mtcute/bun'
-import { join } from 'node:path'
-import { homedir } from 'node:os'
+
 import { copyFileSync, existsSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
+import { TelegramClient } from '@mtcute/bun'
 import { accountsDb } from './db'
 
 const API_ID = parseInt(process.env.TELEGRAM_API_ID ?? '0', 10)
@@ -42,7 +43,7 @@ try {
   } else {
     account = accountsDb.create({
       phone,
-      name: `${me.firstName}${me.lastName ? ' ' + me.lastName : ''}`,
+      name: `${me.firstName}${me.lastName ? ` ${me.lastName}` : ''}`,
       is_active: true,
     })
     console.log(`Created account ID: ${account.id}`)
@@ -53,11 +54,11 @@ try {
   copyFileSync(QR_SESSION, accountSession)
 
   // Also copy WAL files if they exist
-  if (existsSync(QR_SESSION + '-wal')) {
-    copyFileSync(QR_SESSION + '-wal', accountSession + '-wal')
+  if (existsSync(`${QR_SESSION}-wal`)) {
+    copyFileSync(`${QR_SESSION}-wal`, `${accountSession}-wal`)
   }
-  if (existsSync(QR_SESSION + '-shm')) {
-    copyFileSync(QR_SESSION + '-shm', accountSession + '-shm')
+  if (existsSync(`${QR_SESSION}-shm`)) {
+    copyFileSync(`${QR_SESSION}-shm`, `${accountSession}-shm`)
   }
 
   console.log(`Session copied to: ${accountSession}`)
@@ -71,12 +72,13 @@ try {
   })
 
   const verifyMe = await verifyClient.getMe()
-  console.log(`\nVerified! Account ready: ${verifyMe.firstName} (@${verifyMe.username})`)
+  console.log(
+    `\nVerified! Account ready: ${verifyMe.firstName} (@${verifyMe.username})`,
+  )
   console.log('\nYou can now use:')
   console.log('  tg auth status')
   console.log('  tg contacts list')
   console.log('  tg api <method>')
-
 } catch (error: any) {
   console.error('Error:', error.message)
   process.exit(1)

@@ -3,11 +3,32 @@
 ## Quick Reference
 
 ```bash
-# Run CLI
+# Run CLI (development)
 bun run src/index.ts <command>
 
-# Run tests
-bun test
+# Build binary (current platform)
+bun run build
+
+# Build for all platforms
+bun run build:all
+
+# Test build output
+bun run test:build
+
+# Test global installation
+bun run test:install
+
+# Run unit tests
+bun run test
+
+# Run E2E tests
+bun run test:e2e
+
+# Run all tests (unit + E2E)
+bun run test:all
+
+# Run tests with coverage
+bun run test:coverage
 
 # Type check (fast, using tsgo)
 bun run typecheck
@@ -49,8 +70,47 @@ GitHub Actions runs on every push to `main` and on all PRs:
 | **lint** | `bun run lint` (Biome) | 5 min |
 | **typecheck** | `bun run typecheck:tsc` | 5 min |
 | **test** | `bun test` | 10 min |
+| **build-test** | Compile binary and verify it runs | 5 min |
 
 All jobs run in parallel with Bun dependency caching. See `.github/workflows/ci.yml`.
+
+---
+
+## Build & Distribution
+
+### Installing Globally
+
+```bash
+# From npm/bun registry (once published)
+bun install -g telegram-cli
+
+# From local source
+bun link
+```
+
+The `postinstall` script automatically compiles a native binary to `dist/tg`.
+
+### Build Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `bun run build` | Compile binary for current platform → `dist/tg` |
+| `bun run build:minify` | Minified build with sourcemaps |
+| `bun run build:all` | Cross-compile for all platforms (darwin, linux, windows) |
+| `bun run test:build` | Verify build output works |
+| `bun run test:install` | Test `bun link` installation |
+
+### Binary Size
+
+The compiled binary is ~60MB (includes embedded Bun runtime + SQLite).
+
+### Supported Platforms
+
+- `bun-darwin-arm64` — macOS Apple Silicon
+- `bun-darwin-x64` — macOS Intel
+- `bun-linux-x64` — Linux x86_64
+- `bun-linux-arm64` — Linux ARM64
+- `bun-windows-x64` — Windows x86_64
 
 ---
 
@@ -75,6 +135,11 @@ All jobs run in parallel with Bun dependency caching. See `.github/workflows/ci.
 - **Peers expire in 1 week** — contacts, groups, channels
 - **Always store raw_json** — for future-proofing
 - **Use fetched_at timestamps** — on all cached entities
+
+### Commits
+- **Commit when feature is complete** — after tests pass, typecheck runs, and docs are updated
+- **Don't batch unrelated changes** — each commit should be atomic and focused
+- **Keep working directory clean** — don't leave uncommitted changes hanging
 
 ---
 
@@ -297,6 +362,12 @@ for await (const dialog of client.iterDialogs({ limit: 100 })) {
 
 src/
 ├── index.ts              # CLI entry point
+├── __tests__/            # Unit tests (bun:test)
+│   ├── auth.test.ts      # Authentication tests
+│   ├── db.test.ts        # Database tests
+│   ├── output.test.ts    # Output utilities tests
+│   ├── telegram.test.ts  # Telegram service tests
+│   └── types.test.ts     # Type definitions tests
 ├── commands/
 │   ├── auth.ts           # login, logout, status
 │   ├── accounts.ts       # list, add, switch, remove
@@ -328,10 +399,34 @@ src/
 ## Testing Strategy
 
 ### Unit Tests (Offline)
+- Location: `src/__tests__/*.test.ts`
 - Mock mtcute client
-- Test cache logic
-- Test command parsing
-- Test output formatting
+- Test cache logic, command parsing, output formatting
+- Use `createTestDatabase()` for isolated in-memory databases
+
+### E2E Tests (Offline)
+- Location: `src/__e2e__/*.e2e.test.ts`
+- Execute CLI binary via `Bun.spawn`
+- Test actual command behavior, argument parsing, exit codes
+- Use `TELEGRAM_CLI_DATA_DIR` env var for test isolation
+- Each test gets a unique temp directory with fresh database
+
+**Key E2E patterns:**
+```typescript
+// Create isolated environment
+const env = createTestEnvironment('my-test')
+env.initDatabase()
+env.seedAccounts([{ phone: '+1234567890', is_active: true }])
+
+// Run CLI with isolated data dir
+const result = await runCliSuccess(['accounts', 'list'], env.getCliOptions())
+
+// Check JSON output
+expect(result.json?.success).toBe(true)
+
+// Clean up
+env.cleanup()
+```
 
 ### Integration Tests (Online)
 - Use test account: @usualguy
@@ -339,7 +434,7 @@ src/
 - Snapshot responses for offline replay
 
 ```typescript
-// Example test
+// Example unit test
 import { describe, it, expect, mock } from 'bun:test'
 
 describe('contacts list', () => {
@@ -425,17 +520,23 @@ Global Options:
 
 ## Documentation Links
 
+### Implementation Docs (Completed)
+- [Authentication](docs/auth.md)
+- [Caching](docs/caching.md)
+- [Database Schema](docs/database-schema.md)
+- [Testing](docs/testing.md)
+
+### Planning Docs
 - [Architecture](docs/plans/architecture.md)
 - [Daemon](docs/plans/daemon.md)
 - [Sync Strategy](docs/plans/sync-strategy.md)
-- [Caching](docs/plans/caching.md)
-- [Database Schema](docs/plans/database-schema.md)
 - [CLI Commands](docs/plans/cli-commands.md)
 - [Rate Limiting](docs/plans/rate-limiting.md)
 - [AI Integration](docs/plans/ai-integration.md)
 - [Configuration](docs/plans/configuration.md)
 - [Multi-Account](docs/plans/multi-account.md)
+- [Build & Distribution](docs/plans/build-distribution.md)
 
 ---
 
-*Last updated: Architecture finalized, ready for implementation*
+*Last updated: 2026-02-02 01:15:00*

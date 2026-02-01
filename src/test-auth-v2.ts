@@ -1,9 +1,10 @@
 /**
  * Test script v2 - Try different phone formats and inspect responses closely
  */
-import { TelegramClient } from '@mtcute/bun'
-import { join } from 'node:path'
+
 import { homedir } from 'node:os'
+import { join } from 'node:path'
+import { TelegramClient } from '@mtcute/bun'
 
 const API_ID = parseInt(process.env.TELEGRAM_API_ID ?? '0', 10)
 const API_HASH = process.env.TELEGRAM_API_HASH ?? ''
@@ -40,9 +41,13 @@ try {
 
   console.log('\n=== RESPONSE ===')
   console.log('Type:', result)
-  console.log(JSON.stringify(result, (key, value) =>
-    typeof value === 'bigint' ? value.toString() : value, 2))
-
+  console.log(
+    JSON.stringify(
+      result,
+      (_key, value) => (typeof value === 'bigint' ? value.toString() : value),
+      2,
+    ),
+  )
 } catch (error: any) {
   console.error('\n=== ERROR ===')
   console.error('Name:', error.name)
@@ -61,5 +66,5 @@ try {
 }
 
 // Keep process alive briefly to see any delayed messages
-await new Promise(r => setTimeout(r, 2000))
+await new Promise((r) => setTimeout(r, 2000))
 process.exit(0)

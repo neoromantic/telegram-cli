@@ -1,0 +1,5 @@
+# Bun configuration for Telegram CLI
+
+[test]
+# Preload modules to ensure proper initialization during parallel test loading
+preload = ["./test-setup.ts"]

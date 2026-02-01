@@ -65,7 +65,10 @@ export type AuthState =
   | { state: 'unauthorized' }
   | { state: 'awaiting_code'; phone: string; phoneCodeHash: string }
   | { state: 'awaiting_password'; phone: string; hint?: string }
-  | { state: 'authorized'; user: { id: number; firstName: string; username?: string } }
+  | {
+      state: 'authorized'
+      user: { id: number; firstName: string; username?: string }
+    }
 
 /** Error codes */
 export const ErrorCodes = {
@@ -78,6 +81,12 @@ export const ErrorCodes = {
   NO_ACTIVE_ACCOUNT: 'NO_ACTIVE_ACCOUNT',
   PHONE_CODE_INVALID: 'PHONE_CODE_INVALID',
   SESSION_PASSWORD_NEEDED: 'SESSION_PASSWORD_NEEDED',
+  // Daemon error codes
+  DAEMON_NOT_RUNNING: 'DAEMON_NOT_RUNNING',
+  DAEMON_ALREADY_RUNNING: 'DAEMON_ALREADY_RUNNING',
+  DAEMON_SIGNAL_FAILED: 'DAEMON_SIGNAL_FAILED',
+  DAEMON_SHUTDOWN_TIMEOUT: 'DAEMON_SHUTDOWN_TIMEOUT',
+  DAEMON_FORCE_KILL_FAILED: 'DAEMON_FORCE_KILL_FAILED',
 } as const
 
-export type ErrorCode = typeof ErrorCodes[keyof typeof ErrorCodes]
+export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes]

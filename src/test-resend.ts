@@ -1,9 +1,10 @@
 /**
  * Test script to resend code via SMS
  */
-import { TelegramClient } from '@mtcute/bun'
-import { join } from 'node:path'
+
 import { homedir } from 'node:os'
+import { join } from 'node:path'
+import { TelegramClient } from '@mtcute/bun'
 
 const API_ID = parseInt(process.env.TELEGRAM_API_ID ?? '0', 10)
 const API_HASH = process.env.TELEGRAM_API_HASH ?? ''
@@ -49,12 +50,13 @@ try {
   console.log('\nNew code type:', (result as any).type?._)
   console.log('Code length:', (result as any).type?.length)
   console.log('\nPlease check your phone for SMS!')
-
 } catch (error: any) {
   console.error('\n=== ERROR ===')
   console.error('Error message:', error.message)
   if (error.message?.includes('PHONE_CODE_EXPIRED')) {
-    console.log('\nThe previous code expired. Please run test-auth.ts again to get a new code.')
+    console.log(
+      '\nThe previous code expired. Please run test-auth.ts again to get a new code.',
+    )
   }
 }
 

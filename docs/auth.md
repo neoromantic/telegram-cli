@@ -1,5 +1,11 @@
 # Authentication Flow
 
+> **Status: ✅ IMPLEMENTED** - Authentication is working as of 2025-02-01.
+>
+> The implementation uses `@mtcute/bun` with file-based session storage and supports both phone number and QR code login flows. See `src/commands/auth.ts` for the implementation.
+
+---
+
 > **Note:** This document contains inspiration from telegram-mcp-server, not finalized decisions. These patterns have been observed to work in a production implementation.
 
 ## Why Their Auth Works (And Ours Might Not)

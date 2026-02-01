@@ -2,12 +2,13 @@
  * Test QR login using client.start() with qrCodeHandler
  * This might handle 2FA better than signInQr
  */
-import { TelegramClient } from '@mtcute/bun'
-import { join } from 'node:path'
+
 import { homedir } from 'node:os'
-import * as qrcode from 'qrcode-terminal'
-import * as readline from 'node:readline/promises'
+import { join } from 'node:path'
 import { stdin as input, stdout as output } from 'node:process'
+import * as readline from 'node:readline/promises'
+import { TelegramClient } from '@mtcute/bun'
+import * as qrcode from 'qrcode-terminal'
 
 const API_ID = parseInt(process.env.TELEGRAM_API_ID ?? '0', 10)
 const API_HASH = process.env.TELEGRAM_API_HASH ?? ''
@@ -56,7 +57,9 @@ try {
       })
 
       console.log(`Expires: ${expires.toLocaleTimeString()}`)
-      console.log('Waiting for scan (or press Enter to switch to phone login)...\n')
+      console.log(
+        'Waiting for scan (or press Enter to switch to phone login)...\n',
+      )
     },
     phone: async () => {
       // Called if QR not scanned and phone needed
@@ -80,10 +83,11 @@ try {
   })
 
   console.log('\n=== SUCCESS ===')
-  console.log(`Logged in as: ${user.firstName}${user.lastName ? ' ' + user.lastName : ''}`)
+  console.log(
+    `Logged in as: ${user.firstName}${user.lastName ? ` ${user.lastName}` : ''}`,
+  )
   console.log(`Username: @${user.username || 'N/A'}`)
   console.log(`User ID: ${user.id}`)
-
 } catch (error: any) {
   console.error('\n=== ERROR ===')
   console.error('Message:', error.message)
@@ -93,5 +97,5 @@ try {
   }
 }
 
-await new Promise(r => setTimeout(r, 500))
+await new Promise((r) => setTimeout(r, 500))
 process.exit(0)

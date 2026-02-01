@@ -4,6 +4,26 @@
 
 This document defines the command-line interface for `tg` - a Telegram CLI tool designed for AI agent integration. Commands prioritize machine-readable output (JSON by default) while remaining human-usable.
 
+## Implementation Status
+
+| Command | Status | Notes |
+|---------|--------|-------|
+| `auth login` | Implemented | QR code + phone code login |
+| `auth logout` | Implemented | |
+| `auth status` | Implemented | |
+| `accounts list` | Implemented | |
+| `accounts add` | Implemented | |
+| `accounts switch` | Implemented | |
+| `accounts remove` | Implemented | |
+| `contacts list` | Implemented | With UsersCache, --fresh flag |
+| `contacts search` | Implemented | With cache fallback |
+| `contacts get` | Implemented | By ID or @username |
+| `chats list` | Implemented | With ChatsCache, --fresh flag |
+| `chats search` | Implemented | Cache-only search |
+| `chats get` | Implemented | By ID or @username |
+| `send` | Implemented | With cache-based peer resolution |
+| `api` | Implemented | Generic API command |
+
 ## Design Principles
 
 1. **JSON-first output** - All commands output JSON by default for AI consumption
@@ -11,6 +31,7 @@ This document defines the command-line interface for `tg` - a Telegram CLI tool 
 3. **Graceful degradation** - Clear error messages with actionable guidance
 4. **Caching by default** - Use cached data when available, explicit flags for fresh fetch
 5. **Multi-account support** - All commands work with account selection
+6. **Cache metadata in responses** - All data responses include `source` and `stale` fields
 
 ---
 

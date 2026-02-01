@@ -1,9 +1,10 @@
 /**
  * Test that the saved session works
  */
-import { TelegramClient } from '@mtcute/bun'
-import { join } from 'node:path'
+
 import { homedir } from 'node:os'
+import { join } from 'node:path'
+import { TelegramClient } from '@mtcute/bun'
 
 const API_ID = parseInt(process.env.TELEGRAM_API_ID ?? '0', 10)
 const API_HASH = process.env.TELEGRAM_API_HASH ?? ''
@@ -32,7 +33,11 @@ try {
   for await (const dialog of client.iterDialogs({ limit: 5 })) {
     // Dialog has a 'peer' accessor that returns the Peer
     const peer = dialog.peer
-    const title = (peer as any).title || (peer as any).firstName || (peer as any).displayName || 'Unknown'
+    const title =
+      (peer as any).title ||
+      (peer as any).firstName ||
+      (peer as any).displayName ||
+      'Unknown'
     console.log(`- ${title}`)
     if (++count >= 5) break
   }
@@ -48,13 +53,14 @@ try {
     const users = contactsResult.users.slice(0, 5)
     for (const user of users) {
       if (user._ === 'user') {
-        console.log(`- ${user.firstName || ''} ${user.lastName || ''} (@${user.username || 'no username'})`.trim())
+        console.log(
+          `- ${user.firstName || ''} ${user.lastName || ''} (@${user.username || 'no username'})`.trim(),
+        )
       }
     }
   } else {
     console.log('Contacts not modified (cached)')
   }
-
 } catch (error: any) {
   console.error('Error:', error.message)
 }

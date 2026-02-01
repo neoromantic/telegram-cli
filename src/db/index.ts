@@ -3,14 +3,24 @@
  * Supports both file-based (production) and in-memory (testing) databases
  */
 import { Database } from 'bun:sqlite'
+import { existsSync, mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { mkdirSync, existsSync } from 'node:fs'
 
 import type { Account } from '../types'
+import { initCacheSchema } from './schema'
+import { initSyncSchema } from './sync-schema'
 
-// Database location: ~/.telegram-cli/data.db
-const DATA_DIR = join(homedir(), '.telegram-cli')
+/**
+ * Get the data directory path
+ * Supports TELEGRAM_CLI_DATA_DIR env var for testing isolation
+ */
+function resolveDataDir(): string {
+  return process.env.TELEGRAM_CLI_DATA_DIR ?? join(homedir(), '.telegram-cli')
+}
+
+// Database location: ~/.telegram-cli/data.db (or TELEGRAM_CLI_DATA_DIR if set)
+const DATA_DIR = resolveDataDir()
 const DB_PATH = join(DATA_DIR, 'data.db')
 
 /**
@@ -32,7 +42,9 @@ function initSchema(db: Database): void {
   `)
 
   db.run('CREATE INDEX IF NOT EXISTS idx_accounts_phone ON accounts(phone)')
-  db.run('CREATE INDEX IF NOT EXISTS idx_accounts_active ON accounts(is_active)')
+  db.run(
+    'CREATE INDEX IF NOT EXISTS idx_accounts_active ON accounts(is_active)',
+  )
 }
 
 /** Account row class for typed queries */
@@ -51,23 +63,35 @@ class AccountRow {
  */
 function createStatements(db: Database) {
   return {
-    getAllAccounts: db.query('SELECT * FROM accounts ORDER BY id').as(AccountRow),
-    getAccountById: db.query('SELECT * FROM accounts WHERE id = $id').as(AccountRow),
-    getAccountByPhone: db.query('SELECT * FROM accounts WHERE phone = $phone').as(AccountRow),
-    getActiveAccount: db.query('SELECT * FROM accounts WHERE is_active = 1 LIMIT 1').as(AccountRow),
+    getAllAccounts: db
+      .query('SELECT * FROM accounts ORDER BY id')
+      .as(AccountRow),
+    getAccountById: db
+      .query('SELECT * FROM accounts WHERE id = $id')
+      .as(AccountRow),
+    getAccountByPhone: db
+      .query('SELECT * FROM accounts WHERE phone = $phone')
+      .as(AccountRow),
+    getActiveAccount: db
+      .query('SELECT * FROM accounts WHERE is_active = 1 LIMIT 1')
+      .as(AccountRow),
 
-    insertAccount: db.query(`
+    insertAccount: db
+      .query(`
       INSERT INTO accounts (phone, name, session_data, is_active)
       VALUES ($phone, $name, $session_data, $is_active)
       RETURNING *
-    `).as(AccountRow),
+    `)
+      .as(AccountRow),
 
-    updateAccount: db.query(`
+    updateAccount: db
+      .query(`
       UPDATE accounts
       SET phone = $phone, name = $name, session_data = $session_data, updated_at = CURRENT_TIMESTAMP
       WHERE id = $id
       RETURNING *
-    `).as(AccountRow),
+    `)
+      .as(AccountRow),
 
     updateSessionData: db.query(`
       UPDATE accounts
@@ -93,8 +117,16 @@ export interface AccountsDbInterface {
   getById(id: number): Account | null
   getByPhone(phone: string): Account | null
   getActive(): Account | null
-  create(data: { phone: string; name?: string; session_data?: string; is_active?: boolean }): Account
-  update(id: number, data: { phone?: string; name?: string; session_data?: string }): Account | null
+  create(data: {
+    phone: string
+    name?: string
+    session_data?: string
+    is_active?: boolean
+  }): Account
+  update(
+    id: number,
+    data: { phone?: string; name?: string; session_data?: string },
+  ): Account | null
   updateSession(id: number, session_data: string): void
   setActive(id: number): void
   delete(id: number): boolean
@@ -129,7 +161,12 @@ export function createAccountsDb(db: Database): AccountsDbInterface {
     },
 
     /** Create a new account */
-    create(data: { phone: string; name?: string; session_data?: string; is_active?: boolean }): Account {
+    create(data: {
+      phone: string
+      name?: string
+      session_data?: string
+      is_active?: boolean
+    }): Account {
       const result = statements.insertAccount.get({
         $phone: data.phone,
         $name: data.name ?? null,
@@ -141,16 +178,21 @@ export function createAccountsDb(db: Database): AccountsDbInterface {
     },
 
     /** Update account */
-    update(id: number, data: { phone?: string; name?: string; session_data?: string }): Account | null {
+    update(
+      id: number,
+      data: { phone?: string; name?: string; session_data?: string },
+    ): Account | null {
       const current = this.getById(id)
       if (!current) return null
 
-      return statements.updateAccount.get({
-        $id: id,
-        $phone: data.phone ?? current.phone,
-        $name: data.name ?? current.name,
-        $session_data: data.session_data ?? current.session_data,
-      }) ?? null
+      return (
+        statements.updateAccount.get({
+          $id: id,
+          $phone: data.phone ?? current.phone,
+          $name: data.name ?? current.name,
+          $session_data: data.session_data ?? current.session_data,
+        }) ?? null
+      )
     },
 
     /** Update just the session data */
@@ -180,7 +222,10 @@ export function createAccountsDb(db: Database): AccountsDbInterface {
 /**
  * Create an in-memory database for testing
  */
-export function createTestDatabase(): { db: Database; accountsDb: AccountsDbInterface } {
+export function createTestDatabase(): {
+  db: Database
+  accountsDb: AccountsDbInterface
+} {
   const db = new Database(':memory:')
   initSchema(db)
   return { db, accountsDb: createAccountsDb(db) }
@@ -198,9 +243,33 @@ initSchema(db)
 // Production accountsDb instance
 export const accountsDb = createAccountsDb(db)
 
+// Cache database path
+const CACHE_DB_PATH = join(DATA_DIR, 'cache.db')
+
+// Lazy-initialized cache database
+let cacheDb: Database | null = null
+
+/**
+ * Get the cache database instance
+ * Lazy-initializes on first call for better startup performance
+ */
+export function getCacheDb(): Database {
+  if (!cacheDb) {
+    cacheDb = new Database(CACHE_DB_PATH)
+    initCacheSchema(cacheDb)
+    initSyncSchema(cacheDb)
+  }
+  return cacheDb
+}
+
 /** Get database path for debugging */
 export function getDatabasePath(): string {
   return DB_PATH
+}
+
+/** Get cache database path for debugging */
+export function getCacheDatabasePath(): string {
+  return CACHE_DB_PATH
 }
 
 /** Get data directory path */
@@ -209,3 +278,17 @@ export function getDataDir(): string {
 }
 
 export { db }
+
+// Re-export sync schema types and functions
+export {
+  ChatSyncStateRow,
+  DaemonStatusRow,
+  determineSyncPolicy,
+  initSyncSchema,
+  MessageCacheRow,
+  type SyncChatType,
+  SyncJobRow,
+  SyncJobStatus,
+  SyncJobType,
+  SyncPriority,
+} from './sync-schema'

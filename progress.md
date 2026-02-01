@@ -1,119 +1,128 @@
 # Development Progress
 
-## Current Status: QR Login Ready - Phone Code Delivery Issue
+## Current Status: Phase 5 In Progress - Sync System Implementation
 
-## Milestone 1: Authentication & Contacts
+**Last updated**: 2026-02-02
 
-### Completed
-- [x] Research Telegram libraries (chose mtcute)
-- [x] Research CLI frameworks (chose Citty)
-- [x] Architecture decisions documented
-- [x] Project initialized with Bun
-- [x] Directory structure created
-- [x] Initial documentation created
-- [x] Dependencies installed (@mtcute/bun, citty)
-- [x] Database schema (accounts table with sessions)
-- [x] Database layer with prepared statements
-- [x] Telegram client manager (multi-account support)
-- [x] Output utilities (JSON, pretty, quiet modes)
-- [x] Authentication commands (login, logout, status)
-- [x] Account management commands (list, switch, remove, info)
-- [x] Contact commands (list, search, get)
-- [x] Generic API command (`tg api` for any Telegram method)
-- [x] CLI entry point with subcommands
-- [x] TypeScript compilation passes
-- [x] PreCompact hook for state preservation
-- [x] QR code login command (`tg auth login-qr`)
+## What's Working
 
-### Known Issues
-- **Phone code delivery**: API returns success but codes don't appear in user's Telegram app
-  - SMS is blocked for unofficial apps ("API_NOOFICIAL_SEND_SMS_NOT_AVAILABLE")
-  - App-based codes should arrive in "Telegram" chat but don't appear
-  - **Workaround**: Use QR code login instead
+### ✅ Fully Implemented
 
-### Tested & Working ✓
-- [x] QR login (`tg auth login-qr`) - works with 2FA
-- [x] Contact retrieval (`tg contacts list`)
-- [x] Generic API command (`tg api <method>`)
-- [x] Session persistence (SQLite via mtcute storage)
+| Feature | Status | Evidence |
+|---------|--------|----------|
+| **Authentication** | ✅ Complete | Phone login, QR code login, logout, status |
+| **Account Management** | ✅ Complete | list, switch, remove, info |
+| **Contacts** | ✅ Complete | list, search, get with caching + `--fresh` flag |
+| **Chats/Dialogs** | ✅ Complete | list, search, get with caching + `--fresh` flag |
+| **Send Messages** | ✅ Complete | Send to users, groups, channels |
+| **User Lookup** | ✅ Complete | `tg me`, `tg user @username/ID/phone` |
+| **Generic API** | ✅ Complete | `tg api <method>` for any Telegram call |
+| **Output Formatting** | ✅ Complete | JSON, pretty, quiet modes |
+| **Database Layer** | ✅ Complete | Cache schema, users/chats cache, rate limits |
+| **Caching** | ✅ Complete | Stale-while-revalidate pattern, `--fresh` bypass |
+| **Daemon Infrastructure** | ✅ Complete | PID file, start/stop/status commands, signal handlers |
+| **Sync Schema** | ✅ Complete | messages_cache, chat_sync_state, sync_jobs, daemon_status tables |
+| **Update Handlers** | ✅ Complete | New message, edit, delete, batch handlers |
+| **Sync Scheduler** | ✅ Complete | Priority queue, job management, forward/backward sync |
+| **Unit Tests** | ✅ Complete | 818 tests in `src/__tests__/` |
+| **E2E Tests** | ✅ Complete | 80 tests in `src/__e2e__/` |
+| **CI Pipeline** | ✅ Complete | lint, typecheck, test, build-test |
+| **Build System** | ✅ Complete | Native binary compilation, cross-platform |
 
-### Pending Polish
-- [ ] Better error messages
-- [ ] Add more convenience commands
-- [ ] Unit tests
-- [ ] Integration tests
+### 📊 Test Coverage
 
----
+- **898 total tests** (818 unit + 80 E2E)
+- **~85% line coverage**
+- **~80% function coverage**
 
-## Architecture Decisions
+### 🗄️ Database Layer (New)
 
-### Telegram Library: mtcute
-- **Rationale**: TypeScript-first, explicit Bun support via `@mtcute/bun`, modern design
-- **Key feature**: `client.call()` allows calling ANY Telegram API method
-- **Alternatives rejected**:
-  - GramJS: 283 open issues, older patterns
-  - TDL: Native deps, Bun stability concerns
+- **Cache schema**: users_cache, chats_cache, sync_state, rate_limits, api_activity
+- **UsersCache**: getById, getByUsername, getByPhone, search, upsert, prune
+- **ChatsCache**: getById, getByUsername, list, search, upsert, prune
+- **RateLimitsService**: recordCall, flood wait handling, activity logging
+- **Staleness utilities**: parseDuration, isCacheStale, configurable TTLs
 
-### CLI Framework: Citty
-- **Rationale**: TypeScript-first, ES modules, lightweight, UnJS ecosystem
-- **Alternatives rejected**:
-  - Commander: Weaker TypeScript support
-  - Clipanion: Overkill for utility CLI
+### 🔨 Build & Distribution
 
-### Database: bun:sqlite
-- **Rationale**: Native Bun, zero deps, excellent performance
-- Using `.as(Class)` for typed query results
+- Native binary compilation via `bun build --compile`
+- Cross-platform builds (darwin, linux, windows)
+- ~60MB binary (includes Bun runtime + SQLite)
+- Global installation via `bun link`
 
-### Generic API Design
-- Instead of mapping every Telegram method to a CLI command, we have:
-  1. High-level convenience commands (auth, accounts, contacts)
-  2. Generic `tg api` command that calls ANY Telegram method
-- This makes the CLI future-proof and complete without manual mapping
+## Known Issues
 
----
+- **Phone code delivery**: SMS blocked for unofficial apps. Use QR login instead.
 
-## File Structure Created
+## What's Next (Not Yet Implemented)
+
+| Phase | Feature | Status |
+|-------|---------|--------|
+| 2 | Daemon (background sync) | ✅ Mostly complete (multi-account pending) |
+| 3 | Sync & Caching | ✅ Complete (dual cursor, message sync) |
+| 4 | Extended Database Schema | ✅ Complete |
+| 5 | send, chats, me, user, status | ✅ Mostly complete (send, chats done) |
+| 7 | AI Integration | ❌ Not started |
+
+→ See [ROADMAP.md](ROADMAP.md) for full details.
+
+## File Structure
 
 ```
 telegram-cli/
 ├── src/
 │   ├── index.ts              # CLI entry point
 │   ├── commands/
-│   │   ├── auth.ts           # login, logout, status
+│   │   ├── auth.ts           # login, login-qr, logout, status
 │   │   ├── accounts.ts       # list, switch, remove, info
-│   │   ├── contacts.ts       # list, search, get
+│   │   ├── contacts.ts       # list, search, get (with caching)
+│   │   ├── chats.ts          # list, search, get (with caching)
+│   │   ├── send.ts           # send messages
+│   │   ├── user.ts           # me, user lookup
 │   │   └── api.ts            # generic API command
 │   ├── services/
 │   │   └── telegram.ts       # client manager
 │   ├── db/
-│   │   └── index.ts          # SQLite with bun:sqlite
+│   │   ├── index.ts          # SQLite accounts db + getCacheDb()
+│   │   ├── schema.ts         # Cache schema (users, chats, etc.)
+│   │   ├── sync-schema.ts    # Sync schema (messages, sync state, jobs)
+│   │   ├── users-cache.ts    # UsersCache service
+│   │   ├── chats-cache.ts    # ChatsCache service
+│   │   ├── messages-cache.ts # MessagesCache service
+│   │   ├── sync-state.ts     # Chat sync state management
+│   │   ├── sync-jobs.ts      # Sync job queue
+│   │   ├── rate-limits.ts    # Rate limiting service
+│   │   └── types.ts          # Cache types & utilities
 │   ├── types/
-│   │   ├── index.ts          # TypeScript types
-│   │   └── qrcode-terminal.d.ts  # Type declaration
-│   └── utils/
-│       ├── output.ts         # JSON/pretty/quiet output
-│       └── args.ts           # argument parsing
+│   │   └── index.ts          # TypeScript types
+│   ├── utils/
+│   │   └── output.ts         # JSON/pretty/quiet output
+│   ├── daemon/
+│   │   ├── index.ts          # Daemon entry point
+│   │   ├── handlers.ts       # Update handlers (new message, edit, delete)
+│   │   ├── scheduler.ts      # Sync job scheduler
+│   │   └── sync.ts           # Sync workers
+│   ├── __tests__/            # Unit tests (818 tests)
+│   └── __e2e__/              # E2E tests (80 tests)
+│       └── helpers/          # CLI runner, test environment
+├── scripts/
+│   ├── build-all.ts          # Cross-platform builds
+│   ├── postinstall.ts        # Post-install compilation
+│   └── test-*.ts             # Build/install verification
+├── dist/                     # Compiled binaries
 ├── docs/
-│   ├── architecture.md
-│   └── api-design.md
-├── .claude/
-│   ├── settings.json         # PreCompact hook config
-│   └── hooks/
-│       └── precompact-preserve-state.sh
+│   ├── testing.md            # Testing guide
+│   ├── api-design.md         # API philosophy
+│   ├── auth.md               # Authentication
+│   ├── database-schema.md    # Schema docs
+│   └── plans/                # Future features
+├── .github/workflows/
+│   └── ci.yml                # GitHub Actions (4 jobs)
 ├── package.json
-├── .env.example
-├── README.md
+├── ROADMAP.md
 ├── CLAUDE.md
 └── progress.md
 ```
-
----
-
-## Next Steps
-1. **Test QR login**: Run `tg auth login-qr`, scan with Telegram app
-2. Once authenticated, test contact retrieval: `tg contacts list`
-3. Test generic API calls: `tg api users.getUsers --params '{"id":[{"_":"inputUserSelf"}]}'`
-4. Verify session persistence by restarting and running `tg auth status`
 
 ## Usage
 
@@ -121,19 +130,58 @@ telegram-cli/
 # QR code login (recommended)
 tg auth login-qr
 
-# Phone login (may have code delivery issues)
-tg auth login --phone +79261408252
-
 # Check status
 tg auth status
 
-# List contacts
+# List accounts
+tg accounts list
+
+# List contacts (from cache, or --fresh to fetch from API)
 tg contacts list
+tg contacts list --fresh
+
+# List chats/dialogs
+tg chats list
+tg chats list --type private
+tg chats list --fresh
+
+# Send a message
+tg send --to @username --message "Hello!"
+tg send --to 123456789 -m "Hello!"
+
+# Get current user info
+tg me
+tg me --fresh
+
+# Look up any user
+tg user @username
+tg user 123456789
+tg user +1234567890
+
+# Search contacts/chats in cache
+tg contacts search "john"
+tg chats search "group"
 
 # Generic API call
-tg api messages.getDialogs --params '{"offset_date":0,"offset_id":0,"offset_peer":{"_":"inputPeerEmpty"},"limit":10,"hash":"0"}'
+tg api users.getFullUser --id 123456789
 ```
 
 ---
 
-*Last updated: QR login implemented*
+*See [ROADMAP.md](ROADMAP.md) for full feature roadmap.*
+
+---
+
+### Compaction Checkpoint - 2026-02-02 00:31:27
+- Trigger: auto
+- Messages processed: 740
+- Review tasks above and continue from last incomplete item
+
+
+---
+
+### Compaction Checkpoint - 2026-02-02 00:48:24
+- Trigger: manual
+- Messages processed: 1675
+- Review tasks above and continue from last incomplete item
+

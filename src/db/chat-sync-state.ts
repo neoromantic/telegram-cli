@@ -1,0 +1,264 @@
+/**
+ * Chat sync state service
+ * Manages per-chat synchronization state with dual cursors
+ */
+import type { Database } from 'bun:sqlite'
+import {
+  ChatSyncStateRow,
+  type SyncChatType,
+  type SyncPriority,
+} from './sync-schema'
+
+/**
+ * Input for creating/updating chat sync state
+ */
+export interface ChatSyncStateInput {
+  chat_id: number
+  chat_type: SyncChatType
+  member_count?: number
+  sync_priority: SyncPriority
+  sync_enabled: boolean
+  forward_cursor?: number | null
+  backward_cursor?: number | null
+  total_messages?: number | null
+}
+
+/**
+ * Options for updating cursors
+ */
+export interface UpdateCursorsOptions {
+  forward_cursor?: number
+  backward_cursor?: number
+}
+
+/**
+ * Chat sync state service interface
+ */
+export interface ChatSyncStateService {
+  /** Get sync state for a chat */
+  get(chatId: number): ChatSyncStateRow | null
+  /** Create or update sync state */
+  upsert(input: ChatSyncStateInput): void
+  /** Update cursors for a chat */
+  updateCursors(chatId: number, options: UpdateCursorsOptions): void
+  /** Mark history as complete */
+  markHistoryComplete(chatId: number): void
+  /** Increment synced messages count */
+  incrementSyncedMessages(chatId: number, count: number): void
+  /** Get all enabled chats ordered by priority */
+  getEnabledChats(): ChatSyncStateRow[]
+  /** Get chats by priority level */
+  getChatsByPriority(priority: SyncPriority): ChatSyncStateRow[]
+  /** Get chats with incomplete history (for backfill) */
+  getIncompleteHistory(): ChatSyncStateRow[]
+  /** Delete sync state for a chat */
+  delete(chatId: number): void
+  /** Update last sync timestamp */
+  updateLastSync(chatId: number, type: 'forward' | 'backward'): void
+  /** Enable or disable sync for a chat */
+  setSyncEnabled(chatId: number, enabled: boolean): void
+}
+
+/**
+ * Create a chat sync state service
+ */
+export function createChatSyncStateService(db: Database): ChatSyncStateService {
+  const stmts = {
+    get: db
+      .query(`
+      SELECT * FROM chat_sync_state WHERE chat_id = $chat_id
+    `)
+      .as(ChatSyncStateRow),
+
+    upsert: db.prepare(`
+      INSERT INTO chat_sync_state (
+        chat_id, chat_type, member_count, sync_priority, sync_enabled,
+        forward_cursor, backward_cursor, total_messages, updated_at
+      ) VALUES (
+        $chat_id, $chat_type, $member_count, $sync_priority, $sync_enabled,
+        $forward_cursor, $backward_cursor, $total_messages, $now
+      )
+      ON CONFLICT(chat_id) DO UPDATE SET
+        chat_type = excluded.chat_type,
+        member_count = excluded.member_count,
+        sync_priority = excluded.sync_priority,
+        sync_enabled = excluded.sync_enabled,
+        forward_cursor = COALESCE(excluded.forward_cursor, chat_sync_state.forward_cursor),
+        backward_cursor = COALESCE(excluded.backward_cursor, chat_sync_state.backward_cursor),
+        total_messages = COALESCE(excluded.total_messages, chat_sync_state.total_messages),
+        updated_at = excluded.updated_at
+    `),
+
+    updateForwardCursor: db.prepare(`
+      UPDATE chat_sync_state
+      SET forward_cursor = $cursor, updated_at = $now
+      WHERE chat_id = $chat_id
+    `),
+
+    updateBackwardCursor: db.prepare(`
+      UPDATE chat_sync_state
+      SET backward_cursor = $cursor, updated_at = $now
+      WHERE chat_id = $chat_id
+    `),
+
+    updateBothCursors: db.prepare(`
+      UPDATE chat_sync_state
+      SET forward_cursor = $forward, backward_cursor = $backward, updated_at = $now
+      WHERE chat_id = $chat_id
+    `),
+
+    markHistoryComplete: db.prepare(`
+      UPDATE chat_sync_state
+      SET history_complete = 1, updated_at = $now
+      WHERE chat_id = $chat_id
+    `),
+
+    incrementSyncedMessages: db.prepare(`
+      UPDATE chat_sync_state
+      SET synced_messages = synced_messages + $count, updated_at = $now
+      WHERE chat_id = $chat_id
+    `),
+
+    getEnabledChats: db
+      .query(`
+      SELECT * FROM chat_sync_state
+      WHERE sync_enabled = 1
+      ORDER BY sync_priority ASC, chat_id ASC
+    `)
+      .as(ChatSyncStateRow),
+
+    getChatsByPriority: db
+      .query(`
+      SELECT * FROM chat_sync_state
+      WHERE sync_priority = $priority AND sync_enabled = 1
+      ORDER BY chat_id ASC
+    `)
+      .as(ChatSyncStateRow),
+
+    getIncompleteHistory: db
+      .query(`
+      SELECT * FROM chat_sync_state
+      WHERE history_complete = 0 AND sync_enabled = 1
+      ORDER BY sync_priority ASC, chat_id ASC
+    `)
+      .as(ChatSyncStateRow),
+
+    delete: db.prepare(`
+      DELETE FROM chat_sync_state WHERE chat_id = $chat_id
+    `),
+
+    updateLastForwardSync: db.prepare(`
+      UPDATE chat_sync_state
+      SET last_forward_sync = $now, updated_at = $now
+      WHERE chat_id = $chat_id
+    `),
+
+    updateLastBackwardSync: db.prepare(`
+      UPDATE chat_sync_state
+      SET last_backward_sync = $now, updated_at = $now
+      WHERE chat_id = $chat_id
+    `),
+
+    setSyncEnabled: db.prepare(`
+      UPDATE chat_sync_state
+      SET sync_enabled = $enabled, updated_at = $now
+      WHERE chat_id = $chat_id
+    `),
+  }
+
+  return {
+    get(chatId: number): ChatSyncStateRow | null {
+      return stmts.get.get({ $chat_id: chatId }) ?? null
+    },
+
+    upsert(input: ChatSyncStateInput): void {
+      stmts.upsert.run({
+        $chat_id: input.chat_id,
+        $chat_type: input.chat_type,
+        $member_count: input.member_count ?? null,
+        $sync_priority: input.sync_priority,
+        $sync_enabled: input.sync_enabled ? 1 : 0,
+        $forward_cursor: input.forward_cursor ?? null,
+        $backward_cursor: input.backward_cursor ?? null,
+        $total_messages: input.total_messages ?? null,
+        $now: Date.now(),
+      })
+    },
+
+    updateCursors(chatId: number, options: UpdateCursorsOptions): void {
+      const now = Date.now()
+
+      if (
+        options.forward_cursor !== undefined &&
+        options.backward_cursor !== undefined
+      ) {
+        stmts.updateBothCursors.run({
+          $chat_id: chatId,
+          $forward: options.forward_cursor,
+          $backward: options.backward_cursor,
+          $now: now,
+        })
+      } else if (options.forward_cursor !== undefined) {
+        stmts.updateForwardCursor.run({
+          $chat_id: chatId,
+          $cursor: options.forward_cursor,
+          $now: now,
+        })
+      } else if (options.backward_cursor !== undefined) {
+        stmts.updateBackwardCursor.run({
+          $chat_id: chatId,
+          $cursor: options.backward_cursor,
+          $now: now,
+        })
+      }
+    },
+
+    markHistoryComplete(chatId: number): void {
+      stmts.markHistoryComplete.run({
+        $chat_id: chatId,
+        $now: Date.now(),
+      })
+    },
+
+    incrementSyncedMessages(chatId: number, count: number): void {
+      stmts.incrementSyncedMessages.run({
+        $chat_id: chatId,
+        $count: count,
+        $now: Date.now(),
+      })
+    },
+
+    getEnabledChats(): ChatSyncStateRow[] {
+      return stmts.getEnabledChats.all()
+    },
+
+    getChatsByPriority(priority: SyncPriority): ChatSyncStateRow[] {
+      return stmts.getChatsByPriority.all({ $priority: priority })
+    },
+
+    getIncompleteHistory(): ChatSyncStateRow[] {
+      return stmts.getIncompleteHistory.all()
+    },
+
+    delete(chatId: number): void {
+      stmts.delete.run({ $chat_id: chatId })
+    },
+
+    updateLastSync(chatId: number, type: 'forward' | 'backward'): void {
+      const now = Date.now()
+      if (type === 'forward') {
+        stmts.updateLastForwardSync.run({ $chat_id: chatId, $now: now })
+      } else {
+        stmts.updateLastBackwardSync.run({ $chat_id: chatId, $now: now })
+      }
+    },
+
+    setSyncEnabled(chatId: number, enabled: boolean): void {
+      stmts.setSyncEnabled.run({
+        $chat_id: chatId,
+        $enabled: enabled ? 1 : 0,
+        $now: Date.now(),
+      })
+    },
+  }
+}

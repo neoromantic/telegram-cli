@@ -2,20 +2,53 @@
 
 This directory contains detailed implementation plans for telegram-cli features.
 
+> **For implemented features documentation**, see [../](../) (docs/ directory).
+
 ## Document Index
 
-| Document | Description | Priority |
-|----------|-------------|----------|
-| [architecture.md](./architecture.md) | System design, CLI/Daemon modes, data flow | Critical |
-| [daemon.md](./daemon.md) | Background sync process, lifecycle, multi-account | Critical |
-| [sync-strategy.md](./sync-strategy.md) | Dual cursors, priorities, real-time + backfill | Critical |
-| [caching.md](./caching.md) | Stale-while-revalidate, `--fresh` flag | High |
-| [database-schema.md](./database-schema.md) | Tables, indexes, per-account storage | High |
-| [multi-account.md](./multi-account.md) | Account management, identification | High |
-| [cli-commands.md](./cli-commands.md) | All commands, flags, output formats | High |
-| [rate-limiting.md](./rate-limiting.md) | FLOOD_WAIT handling, `tg status` | Medium |
-| [ai-integration.md](./ai-integration.md) | Skills, Claude Code, self-install | Medium |
-| [configuration.md](./configuration.md) | config.json, env vars, defaults | Medium |
+### Core Architecture
+
+| Document | Description | Status |
+|----------|-------------|--------|
+| [architecture.md](./architecture.md) | Full system design, CLI/Daemon modes, data flow | Planning |
+| [daemon.md](./daemon.md) | Background sync process, lifecycle, multi-account | Planning |
+| [sync-strategy.md](./sync-strategy.md) | Dual cursors, priorities, real-time + backfill | Planning |
+
+### Features
+
+| Document | Description | Status |
+|----------|-------------|--------|
+| [cli-commands.md](./cli-commands.md) | CLI commands: auth, accounts, contacts, chats, send | **Implemented** |
+| [contacts.md](./contacts.md) | Contact management with caching | **Implemented** |
+| [multi-account.md](./multi-account.md) | Per-account storage, labels | Partial |
+| [rate-limiting.md](./rate-limiting.md) | FLOOD_WAIT handling, `tg status` | Planning |
+| [ai-integration.md](./ai-integration.md) | Skills, Claude Code, self-install | Planning |
+| [configuration.md](./configuration.md) | config.json, env vars, defaults | Planning |
+| [build-distribution.md](./build-distribution.md) | Publishing, releases, homebrew | **Implemented** |
+| [testing.md](./testing.md) | Unit + E2E tests | **Implemented** |
+
+### Future Features
+
+| Document | Description | Status |
+|----------|-------------|--------|
+| [search.md](./search.md) | FTS5 full-text search | Planning |
+| [groups.md](./groups.md) | Group operations | Planning |
+| [real-time.md](./real-time.md) | Real-time event handlers | Planning |
+| [channel-tags.md](./channel-tags.md) | Channel tagging system | Planning |
+| [core-infrastructure.md](./core-infrastructure.md) | Store/config patterns | Partial |
+
+## Recently Implemented
+
+### Caching System (see [../caching.md](../caching.md))
+- `UsersCache` - User/contact caching with stale-while-revalidate
+- `ChatsCache` - Dialog/chat caching with filtering
+- Lazy database initialization via `getCacheDb()`
+- `--fresh` flag for bypassing cache
+
+### Commands
+- `tg contacts list/search/get` - With UsersCache
+- `tg chats list/search/get` - With ChatsCache
+- `tg send` - With cache-based peer resolution
 
 ## Architecture Summary
 
@@ -64,20 +97,3 @@ This directory contains detailed implementation plans for telegram-cli features.
 2. **Then [daemon.md](./daemon.md)** — How background sync works
 3. **Then [sync-strategy.md](./sync-strategy.md)** — Cursor management, priorities
 4. **Then [cli-commands.md](./cli-commands.md)** — What users can do
-
-## Legacy Documents
-
-The following documents contain **inspiration from telegram-mcp-server** and should be updated or replaced:
-
-- `auth.md` — Auth patterns (needs update for QR login)
-- `database.md` — Old schema (replaced by database-schema.md)
-- `message-sync.md` — Old sync patterns (replaced by sync-strategy.md)
-- `telegram-client.md` — Client wrapper patterns
-- `core-infrastructure.md` — Store/config patterns
-- `search.md` — FTS5 patterns (future feature)
-- `contacts.md` — Contact management
-- `groups.md` — Group operations
-- `real-time.md` — Real-time handlers
-- `channel-tags.md` — Channel tagging (future feature)
-
-These will be consolidated or removed as we implement our own solutions.

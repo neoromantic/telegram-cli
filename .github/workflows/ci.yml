@@ -98,9 +98,43 @@ jobs:
       - name: Run tests
         run: bun test
 
+  build-test:
+    name: Build Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build binary
+        run: bun build ./src/index.ts --compile --outfile dist/tg
+
+      - name: Verify binary runs
+        run: ./dist/tg --version
+
+      - name: Verify help works
+        run: ./dist/tg --help
+
   ci-success:
     name: CI Success
-    needs: [lint, typecheck, test]
+    needs: [lint, typecheck, test, build-test]
     runs-on: ubuntu-latest
     if: always()
 
@@ -109,7 +143,8 @@ jobs:
         run: |
           if [[ "${{ needs.lint.result }}" != "success" ]] || \
              [[ "${{ needs.typecheck.result }}" != "success" ]] || \
-             [[ "${{ needs.test.result }}" != "success" ]]; then
+             [[ "${{ needs.test.result }}" != "success" ]] || \
+             [[ "${{ needs.build-test.result }}" != "success" ]]; then
             echo "::error::One or more CI jobs failed"
             exit 1
           fi

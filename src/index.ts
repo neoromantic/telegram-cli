@@ -5,13 +5,16 @@
  * A comprehensive Telegram CLI client for agent-friendly automation.
  */
 import { defineCommand, runMain } from 'citty'
-
-import { authCommand } from './commands/auth'
 import { accountsCommand } from './commands/accounts'
-import { contactsCommand } from './commands/contacts'
 import { apiCommand } from './commands/api'
-import { setOutputFormat } from './utils/output'
+import { authCommand } from './commands/auth'
+import { chatsCommand } from './commands/chats'
+import { contactsCommand } from './commands/contacts'
+import { daemonCommand } from './commands/daemon'
+import { sendCommand } from './commands/send'
+import { meCommand, userCommand } from './commands/user'
 import type { OutputFormat } from './types'
+import { setOutputFormat } from './utils/output'
 
 const main = defineCommand({
   meta: {
@@ -49,7 +52,12 @@ const main = defineCommand({
     auth: authCommand,
     accounts: accountsCommand,
     contacts: contactsCommand,
+    chats: chatsCommand,
+    send: sendCommand,
+    daemon: daemonCommand,
     api: apiCommand,
+    me: meCommand,
+    user: userCommand,
   },
 })
 

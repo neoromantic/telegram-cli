@@ -1,12 +1,13 @@
 /**
  * Clean QR login test with explicit SqliteStorage
  */
-import { TelegramClient, SqliteStorage } from '@mtcute/bun'
-import { join } from 'node:path'
+
 import { homedir } from 'node:os'
-import * as qrcode from 'qrcode-terminal'
-import * as readline from 'node:readline/promises'
+import { join } from 'node:path'
 import { stdin as input, stdout as output } from 'node:process'
+import * as readline from 'node:readline/promises'
+import { SqliteStorage, TelegramClient } from '@mtcute/bun'
+import * as qrcode from 'qrcode-terminal'
 
 const API_ID = parseInt(process.env.TELEGRAM_API_ID ?? '0', 10)
 const API_HASH = process.env.TELEGRAM_API_HASH ?? ''
@@ -43,7 +44,9 @@ async function prompt(message: string): Promise<string> {
 }
 
 console.log('Starting QR login...')
-console.log('Scan with Telegram app: Settings → Devices → Link Desktop Device\n')
+console.log(
+  'Scan with Telegram app: Settings → Devices → Link Desktop Device\n',
+)
 
 try {
   const user = await client.signInQr({
@@ -71,13 +74,14 @@ try {
   console.log('\nVerifying session...')
   const me = await client.getMe()
   console.log(`Session works! Logged in as: ${me.firstName}`)
-
 } catch (error: any) {
   console.error('\n=== ERROR ===')
   console.error(error.message)
 
   if (error.message?.includes('key is not registered')) {
-    console.log('\nThis error means the auth key was lost between QR scan and 2FA.')
+    console.log(
+      '\nThis error means the auth key was lost between QR scan and 2FA.',
+    )
     console.log('This might be a timing issue or mtcute bug with QR+2FA.')
   }
 }

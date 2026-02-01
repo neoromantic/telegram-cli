@@ -1,11 +1,60 @@
 /**
- * Contact management commands
+ * Contact management commands with caching
+ * Uses UsersCache for stale-while-revalidate pattern
  */
 import { defineCommand } from 'citty'
 
+import { getCacheDb } from '../db'
+import { getDefaultCacheConfig, isCacheStale } from '../db/types'
+import { createUsersCache, type UserCacheInput } from '../db/users-cache'
 import { getClientForAccount } from '../services/telegram'
-import { success, error } from '../utils/output'
-import { ErrorCodes, type Contact, type PaginatedResult } from '../types'
+import { type Contact, ErrorCodes, type PaginatedResult } from '../types'
+import { error, success, verbose } from '../utils/output'
+
+/**
+ * Convert Telegram API user to Contact
+ */
+function apiUserToContact(user: any): Contact {
+  return {
+    id: user.id,
+    firstName: user.firstName ?? '',
+    lastName: user.lastName ?? null,
+    username: user.username ?? null,
+    phone: user.phone ?? null,
+  }
+}
+
+/**
+ * Convert Telegram API user to UserCacheInput
+ */
+function apiUserToCacheInput(user: any): UserCacheInput {
+  return {
+    user_id: String(user.id),
+    username: user.username ?? null,
+    first_name: user.firstName ?? null,
+    last_name: user.lastName ?? null,
+    phone: user.phone ?? null,
+    access_hash: user.accessHash ? String(user.accessHash) : null,
+    is_contact: user.contact ? 1 : 0,
+    is_bot: user.bot ? 1 : 0,
+    is_premium: user.premium ? 1 : 0,
+    fetched_at: Date.now(),
+    raw_json: JSON.stringify(user),
+  }
+}
+
+/**
+ * Convert cached user to Contact
+ */
+function cachedUserToContact(cached: any): Contact {
+  return {
+    id: Number(cached.user_id),
+    firstName: cached.first_name ?? '',
+    lastName: cached.last_name ?? null,
+    username: cached.username ?? null,
+    phone: cached.phone ?? null,
+  }
+}
 
 /**
  * List contacts
@@ -30,18 +79,73 @@ export const listContactsCommand = defineCommand({
       type: 'string',
       description: 'Account ID (uses active account if not specified)',
     },
+    fresh: {
+      type: 'boolean',
+      description: 'Bypass cache and fetch from API',
+      default: false,
+    },
   },
   async run({ args }) {
-    const limit = parseInt(args.limit ?? '50', 10)
-    const offset = parseInt(args.offset ?? '0', 10)
-    const accountId = args.account ? parseInt(args.account, 10) : undefined
+    const limit = Number.parseInt(args.limit ?? '50', 10)
+    const offset = Number.parseInt(args.offset ?? '0', 10)
+    const accountId = args.account
+      ? Number.parseInt(args.account, 10)
+      : undefined
+    const fresh = args.fresh ?? false
 
     try {
+      const cacheDb = getCacheDb()
+      const usersCache = createUsersCache(cacheDb)
+      const cacheConfig = getDefaultCacheConfig()
+
+      // Check cache first (unless --fresh)
+      if (!fresh) {
+        const cachedUsers = usersCache.getAll({ limit: 1000 }) // Get all to check count
+        const contacts = cachedUsers.filter((u) => u.is_contact === 1)
+
+        if (contacts.length > 0) {
+          // Check if any are stale
+          const anyStale = contacts.some((u) =>
+            isCacheStale(u.fetched_at, cacheConfig.staleness.peers),
+          )
+
+          // Apply pagination
+          const paginatedContacts = contacts
+            .slice(offset, offset + limit)
+            .map(cachedUserToContact)
+
+          const response: PaginatedResult<Contact> & {
+            source: string
+            stale: boolean
+          } = {
+            items: paginatedContacts,
+            total: contacts.length,
+            offset,
+            limit,
+            hasMore: offset + limit < contacts.length,
+            source: 'cache',
+            stale: anyStale,
+          }
+
+          if (anyStale) {
+            verbose(
+              'Cache is stale, consider using --fresh flag to refresh data',
+            )
+          }
+
+          success(response)
+          return
+        }
+      }
+
+      // Fetch from API
+      verbose('Fetching contacts from Telegram API...')
       const client = getClientForAccount(accountId)
 
-      // Fetch contacts using raw API
-      // hash should be bigint (Long) in mtcute
-      const result = await client.call({ _: 'contacts.getContacts', hash: BigInt(0) } as any)
+      const result = await client.call({
+        _: 'contacts.getContacts',
+        hash: BigInt(0),
+      } as any)
 
       if (result._ === 'contacts.contactsNotModified') {
         success({
@@ -50,31 +154,40 @@ export const listContactsCommand = defineCommand({
           offset,
           limit,
           hasMore: false,
+          source: 'api',
+          stale: false,
           message: 'Contacts not modified since last fetch',
         })
         return
       }
 
-      // Map users to our Contact type
-      const allContacts: Contact[] = (result.users as any[])
-        .filter((u: any) => u._ === 'user')
-        .map((user: any) => ({
-          id: user.id,
-          firstName: user.firstName ?? '',
-          lastName: user.lastName ?? null,
-          username: user.username ?? null,
-          phone: user.phone ?? null,
-        }))
+      // Extract and cache users
+      const apiUsers = (result.users as any[]).filter(
+        (u: any) => u._ === 'user',
+      )
+
+      // Cache all users
+      const cacheInputs = apiUsers.map(apiUserToCacheInput)
+      usersCache.upsertMany(cacheInputs)
+      verbose(`Cached ${cacheInputs.length} contacts`)
+
+      // Map to our Contact type
+      const allContacts: Contact[] = apiUsers.map(apiUserToContact)
 
       // Apply pagination
       const paginatedContacts = allContacts.slice(offset, offset + limit)
 
-      const response: PaginatedResult<Contact> = {
+      const response: PaginatedResult<Contact> & {
+        source: string
+        stale: boolean
+      } = {
         items: paginatedContacts,
         total: allContacts.length,
         offset,
         limit,
         hasMore: offset + limit < allContacts.length,
+        source: 'api',
+        stale: false,
       }
 
       success(response)
@@ -108,37 +221,78 @@ export const searchContactsCommand = defineCommand({
       type: 'string',
       description: 'Account ID (uses active account if not specified)',
     },
+    fresh: {
+      type: 'boolean',
+      description: 'Bypass cache and search via API',
+      default: false,
+    },
   },
   async run({ args }) {
     const query = args.query
-    const limit = parseInt(args.limit ?? '20', 10)
-    const accountId = args.account ? parseInt(args.account, 10) : undefined
+    const limit = Number.parseInt(args.limit ?? '20', 10)
+    const accountId = args.account
+      ? Number.parseInt(args.account, 10)
+      : undefined
+    const fresh = args.fresh ?? false
 
     try {
+      const cacheDb = getCacheDb()
+      const usersCache = createUsersCache(cacheDb)
+      const cacheConfig = getDefaultCacheConfig()
+
+      // Check cache first (unless --fresh)
+      if (!fresh) {
+        const cachedResults = usersCache.search(query, limit)
+
+        if (cachedResults.length > 0) {
+          const anyStale = cachedResults.some((u) =>
+            isCacheStale(u.fetched_at, cacheConfig.staleness.peers),
+          )
+
+          const contacts = cachedResults.map(cachedUserToContact)
+
+          success({
+            query,
+            results: contacts,
+            total: contacts.length,
+            source: 'cache',
+            stale: anyStale,
+          })
+          return
+        }
+      }
+
+      // Search via API
+      verbose(`Searching Telegram API for "${query}"...`)
       const client = getClientForAccount(accountId)
 
-      // Search using Telegram's search
       const result = await client.call({
         _: 'contacts.search',
         q: query,
         limit,
       } as any)
 
-      // Map users to our Contact type
-      const contacts: Contact[] = (result.users as any[])
-        .filter((u: any) => u._ === 'user')
-        .map((user: any) => ({
-          id: user.id,
-          firstName: user.firstName ?? '',
-          lastName: user.lastName ?? null,
-          username: user.username ?? null,
-          phone: user.phone ?? null,
-        }))
+      // Extract and cache users
+      const apiUsers = (result.users as any[]).filter(
+        (u: any) => u._ === 'user',
+      )
+
+      // Cache results
+      const cacheInputs = apiUsers.map(apiUserToCacheInput)
+      if (cacheInputs.length > 0) {
+        usersCache.upsertMany(cacheInputs)
+        verbose(`Cached ${cacheInputs.length} search results`)
+      }
+
+      // Map to Contact type
+      const contacts = apiUsers.map(apiUserToContact)
 
       success({
         query,
         results: contacts,
         total: contacts.length,
+        source: 'api',
+        stale: false,
       })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error'
@@ -153,37 +307,107 @@ export const searchContactsCommand = defineCommand({
 export const getContactCommand = defineCommand({
   meta: {
     name: 'get',
-    description: 'Get contact information by user ID',
+    description: 'Get contact information by user ID or username',
   },
   args: {
     id: {
       type: 'string',
-      description: 'User ID',
+      description: 'User ID or @username',
       required: true,
     },
     account: {
       type: 'string',
       description: 'Account ID (uses active account if not specified)',
     },
+    fresh: {
+      type: 'boolean',
+      description: 'Bypass cache and fetch from API',
+      default: false,
+    },
   },
   async run({ args }) {
-    const userId = parseInt(args.id, 10)
-    const accountId = args.account ? parseInt(args.account, 10) : undefined
+    const identifier = args.id
+    const accountId = args.account
+      ? Number.parseInt(args.account, 10)
+      : undefined
+    const fresh = args.fresh ?? false
 
     try {
+      const cacheDb = getCacheDb()
+      const usersCache = createUsersCache(cacheDb)
+      const cacheConfig = getDefaultCacheConfig()
+
+      // Determine if ID or username
+      const isUsername =
+        identifier.startsWith('@') || Number.isNaN(Number(identifier))
+
+      // Check cache first (unless --fresh)
+      if (!fresh) {
+        const cached = isUsername
+          ? usersCache.getByUsername(identifier)
+          : usersCache.getById(identifier)
+
+        if (cached) {
+          const stale = isCacheStale(
+            cached.fetched_at,
+            cacheConfig.staleness.peers,
+          )
+
+          success({
+            id: Number(cached.user_id),
+            firstName: cached.first_name ?? '',
+            lastName: cached.last_name ?? null,
+            username: cached.username ?? null,
+            phone: cached.phone ?? null,
+            isBot: cached.is_bot === 1,
+            isPremium: cached.is_premium === 1,
+            isContact: cached.is_contact === 1,
+            source: 'cache',
+            stale,
+          })
+          return
+        }
+      }
+
+      // Fetch from API
+      verbose(`Fetching user "${identifier}" from Telegram API...`)
       const client = getClientForAccount(accountId)
 
-      // Get user info - use resolvePeer for better compatibility
-      const result = await client.call({
-        _: 'users.getUsers',
-        id: [{ _: 'inputUser', userId, accessHash: BigInt(0) }],
-      } as any)
+      let result: any[]
 
-      const user = (result as any[]).find((u: any) => u._ === 'user')
+      if (isUsername) {
+        // Resolve username first
+        const resolved = await client.call({
+          _: 'contacts.resolveUsername',
+          username: identifier.replace('@', ''),
+        } as any)
+
+        if (!resolved.users || resolved.users.length === 0) {
+          error(
+            ErrorCodes.TELEGRAM_ERROR,
+            `User @${identifier.replace('@', '')} not found`,
+          )
+        }
+
+        result = resolved.users
+      } else {
+        // Get by user ID
+        const userId = Number.parseInt(identifier, 10)
+        result = await client.call({
+          _: 'users.getUsers',
+          id: [{ _: 'inputUser', userId, accessHash: BigInt(0) }],
+        } as any)
+      }
+
+      const user = result.find((u: any) => u._ === 'user')
 
       if (!user) {
-        error(ErrorCodes.TELEGRAM_ERROR, `User with ID ${userId} not found`)
+        error(ErrorCodes.TELEGRAM_ERROR, `User "${identifier}" not found`)
       }
+
+      // Cache the user
+      usersCache.upsert(apiUserToCacheInput(user))
+      verbose('Cached user data')
 
       success({
         id: user.id,
@@ -194,6 +418,10 @@ export const getContactCommand = defineCommand({
         bio: user.about ?? null,
         isBot: user.bot ?? false,
         isVerified: user.verified ?? false,
+        isPremium: user.premium ?? false,
+        isContact: user.contact ?? false,
+        source: 'api',
+        stale: false,
       })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error'

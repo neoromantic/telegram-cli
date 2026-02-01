@@ -1,9 +1,10 @@
 /**
  * Test script to verify auth code sending
  */
-import { TelegramClient } from '@mtcute/bun'
-import { join } from 'node:path'
+
 import { homedir } from 'node:os'
+import { join } from 'node:path'
+import { TelegramClient } from '@mtcute/bun'
 
 const API_ID = parseInt(process.env.TELEGRAM_API_ID ?? '0', 10)
 const API_HASH = process.env.TELEGRAM_API_HASH ?? ''
@@ -38,7 +39,7 @@ try {
     phoneNumber: PHONE.replace('+', ''),
     apiId: API_ID,
     apiHash: API_HASH,
-    settings: { _: 'codeSettings' }
+    settings: { _: 'codeSettings' },
   } as any)
 
   console.log('\n=== CODE SENT SUCCESSFULLY ===')
@@ -47,7 +48,6 @@ try {
   console.log('Code length:', (result as any).type?.length)
   console.log('Phone code hash:', (result as any).phoneCodeHash)
   console.log('\nPlease check your Telegram app for the code!')
-
 } catch (error) {
   console.error('\n=== ERROR ===')
   console.error(error)

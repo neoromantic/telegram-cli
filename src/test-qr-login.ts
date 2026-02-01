@@ -1,12 +1,13 @@
 /**
  * Test script for QR code login
  */
-import { TelegramClient } from '@mtcute/bun'
-import { join } from 'node:path'
+
 import { homedir } from 'node:os'
-import * as qrcode from 'qrcode-terminal'
-import * as readline from 'node:readline/promises'
+import { join } from 'node:path'
 import { stdin as input, stdout as output } from 'node:process'
+import * as readline from 'node:readline/promises'
+import { TelegramClient } from '@mtcute/bun'
+import * as qrcode from 'qrcode-terminal'
 
 const API_ID = parseInt(process.env.TELEGRAM_API_ID ?? '0', 10)
 const API_HASH = process.env.TELEGRAM_API_HASH ?? ''
@@ -71,10 +72,11 @@ try {
   })
 
   console.log('\n=== SUCCESS ===')
-  console.log(`Logged in as: ${user.firstName}${user.lastName ? ' ' + user.lastName : ''}`)
+  console.log(
+    `Logged in as: ${user.firstName}${user.lastName ? ` ${user.lastName}` : ''}`,
+  )
   console.log(`Username: @${user.username || 'N/A'}`)
   console.log(`User ID: ${user.id}`)
-
 } catch (error: any) {
   console.error('\n=== ERROR ===')
   console.error('Name:', error.name)
