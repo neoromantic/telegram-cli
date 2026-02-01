@@ -34,8 +34,10 @@ export interface SyncScheduler {
   queueInitialLoad(chatId: number, messageCount: number): void
   /** Initialize scheduler with startup jobs */
   initializeForStartup(): Promise<void>
-  /** Get next job to process */
+  /** Get next job to process (non-atomic, use claimNextJob for concurrent safety) */
   getNextJob(): SyncJobRow | null
+  /** Atomically claim and start the next pending job (prevents race conditions) */
+  claimNextJob(): SyncJobRow | null
   /** Mark job as running */
   startJob(jobId: number): void
   /** Mark job as completed */
@@ -180,6 +182,10 @@ export function createSyncScheduler(
 
     getNextJob(): SyncJobRow | null {
       return jobsService.getNextPending()
+    },
+
+    claimNextJob(): SyncJobRow | null {
+      return jobsService.claimNextJob()
     },
 
     startJob(jobId: number): void {

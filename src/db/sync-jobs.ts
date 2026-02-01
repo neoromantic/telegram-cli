@@ -40,6 +40,8 @@ export interface SyncJobsService {
   getById(id: number): SyncJobRow | null
   /** Get the next pending job (highest priority, oldest first) */
   getNextPending(): SyncJobRow | null
+  /** Atomically claim the next pending job (prevents race conditions) */
+  claimNextJob(): SyncJobRow | null
   /** Get all pending jobs */
   getPendingJobs(): SyncJobRow[]
   /** Mark job as running */
@@ -88,6 +90,21 @@ export function createSyncJobsService(db: Database): SyncJobsService {
       WHERE status = $status
       ORDER BY priority ASC, created_at ASC
       LIMIT 1
+    `)
+      .as(SyncJobRow),
+
+    claimNextJob: db
+      .query(`
+      UPDATE sync_jobs
+      SET status = $newStatus, started_at = $now
+      WHERE id = (
+        SELECT id FROM sync_jobs
+        WHERE status = $pendingStatus
+        ORDER BY priority ASC, created_at ASC
+        LIMIT 1
+      )
+      AND status = $pendingStatus
+      RETURNING *
     `)
       .as(SyncJobRow),
 
@@ -191,6 +208,16 @@ export function createSyncJobsService(db: Database): SyncJobsService {
     getNextPending(): SyncJobRow | null {
       return (
         stmts.getNextPending.get({ $status: SyncJobStatus.Pending }) ?? null
+      )
+    },
+
+    claimNextJob(): SyncJobRow | null {
+      return (
+        stmts.claimNextJob.get({
+          $pendingStatus: SyncJobStatus.Pending,
+          $newStatus: SyncJobStatus.Running,
+          $now: Date.now(),
+        }) ?? null
       )
     },
 
