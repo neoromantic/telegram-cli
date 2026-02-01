@@ -45,10 +45,19 @@ export interface EditMessageData {
 }
 
 /**
- * Delete messages update data
+ * Delete messages update data (with known chat ID, e.g., channels)
  */
 export interface DeleteMessagesData {
   chatId: number
+  messageIds: number[]
+}
+
+/**
+ * Delete messages update data (without chat ID, e.g., DMs and basic groups)
+ * For non-channel chats, mtcute only provides message IDs without the chat context.
+ * The handler must look up the chat ID from the messages cache.
+ */
+export interface DeleteMessagesWithoutChatData {
   messageIds: number[]
 }
 
@@ -60,11 +69,16 @@ export interface UpdateHandlers {
   handleNewMessage(_ctx: UpdateContext, data: NewMessageData): Promise<void>
   /** Handle a message edit */
   handleEditMessage(_ctx: UpdateContext, data: EditMessageData): Promise<void>
-  /** Handle message deletions */
+  /** Handle message deletions (with known chat ID, e.g., channels) */
   handleDeleteMessages(
     _ctx: UpdateContext,
     data: DeleteMessagesData,
   ): Promise<void>
+  /** Handle message deletions without chat ID (DMs and basic groups) */
+  handleDeleteMessagesWithoutChat(
+    _ctx: UpdateContext,
+    data: DeleteMessagesWithoutChatData,
+  ): Promise<number>
   /** Handle a batch of messages (for history sync) */
   handleBatchMessages(
     _ctx: UpdateContext,
@@ -182,6 +196,15 @@ export function createUpdateHandlers(
     ): Promise<void> {
       // Mark messages as deleted
       messagesCache.markDeleted(data.chatId, data.messageIds)
+    },
+
+    async handleDeleteMessagesWithoutChat(
+      _ctx: UpdateContext,
+      data: DeleteMessagesWithoutChatData,
+    ): Promise<number> {
+      // For DMs and basic groups, mtcute doesn't provide the chat ID.
+      // We look up the chat from our messages cache and mark them deleted.
+      return messagesCache.markDeletedByMessageIds(data.messageIds)
     },
 
     async handleBatchMessages(

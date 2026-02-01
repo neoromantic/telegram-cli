@@ -179,6 +179,69 @@ describe('UpdateHandlers', () => {
     })
   })
 
+  describe('handleDeleteMessagesWithoutChat', () => {
+    it('marks messages as deleted when chat ID is unknown', async () => {
+      // Insert messages in different chats (simulating DMs and groups)
+      messagesCache.upsert({
+        chat_id: 100,
+        message_id: 1,
+        text: 'DM message',
+        message_type: 'text',
+        date: Date.now(),
+        raw_json: '{}',
+      })
+      messagesCache.upsert({
+        chat_id: 200,
+        message_id: 2,
+        text: 'Group message',
+        message_type: 'text',
+        date: Date.now(),
+        raw_json: '{}',
+      })
+
+      const ctx: UpdateContext = {
+        accountId: 1,
+        receivedAt: Date.now(),
+      }
+
+      // Delete messages without providing chat IDs (as mtcute does for non-channel chats)
+      const deletedCount = await handlers.handleDeleteMessagesWithoutChat(ctx, {
+        messageIds: [1, 2],
+      })
+
+      expect(deletedCount).toBe(2)
+      expect(messagesCache.get(100, 1)?.is_deleted).toBe(1)
+      expect(messagesCache.get(200, 2)?.is_deleted).toBe(1)
+    })
+
+    it('returns 0 when messages are not in cache', async () => {
+      const ctx: UpdateContext = {
+        accountId: 1,
+        receivedAt: Date.now(),
+      }
+
+      // Try to delete messages that don't exist in cache
+      const deletedCount = await handlers.handleDeleteMessagesWithoutChat(ctx, {
+        messageIds: [999, 1000],
+      })
+
+      expect(deletedCount).toBe(0)
+    })
+
+    it('handles empty message IDs array', async () => {
+      const ctx: UpdateContext = {
+        accountId: 1,
+        receivedAt: Date.now(),
+      }
+
+      const deletedCount = await handlers.handleDeleteMessagesWithoutChat(ctx, {
+        messageIds: [],
+      })
+
+      expect(deletedCount).toBe(0)
+    })
+  })
+
   describe('handleBatchMessages', () => {
     it('processes multiple messages efficiently', async () => {
       const ctx: UpdateContext = {
