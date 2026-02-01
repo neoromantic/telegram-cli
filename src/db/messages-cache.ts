@@ -76,7 +76,7 @@ export function createMessagesCache(db: Database): MessagesCache {
   // Prepare statements for performance
   const stmts = {
     upsert: db.prepare(`
-      INSERT OR REPLACE INTO messages_cache (
+      INSERT INTO messages_cache (
         chat_id, message_id, from_id, reply_to_id, forward_from_id,
         text, message_type, has_media, media_path,
         is_outgoing, is_edited, is_pinned, is_deleted, edit_date,
@@ -87,6 +87,23 @@ export function createMessagesCache(db: Database): MessagesCache {
         $is_outgoing, $is_edited, $is_pinned, $is_deleted, $edit_date,
         $date, $fetched_at, $raw_json, $updated_at
       )
+      ON CONFLICT (chat_id, message_id) DO UPDATE SET
+        from_id = excluded.from_id,
+        reply_to_id = excluded.reply_to_id,
+        forward_from_id = excluded.forward_from_id,
+        text = excluded.text,
+        message_type = excluded.message_type,
+        has_media = excluded.has_media,
+        media_path = excluded.media_path,
+        is_outgoing = excluded.is_outgoing,
+        is_edited = excluded.is_edited,
+        is_pinned = excluded.is_pinned,
+        is_deleted = excluded.is_deleted,
+        edit_date = excluded.edit_date,
+        date = excluded.date,
+        fetched_at = excluded.fetched_at,
+        raw_json = excluded.raw_json,
+        updated_at = excluded.updated_at
     `),
 
     get: db

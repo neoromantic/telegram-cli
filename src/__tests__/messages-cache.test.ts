@@ -59,6 +59,73 @@ describe('MessagesCache', () => {
       expect(retrieved?.text).toBe('Updated')
       expect(retrieved?.is_edited).toBe(1)
     })
+
+    it('preserves created_at timestamp when updating an existing message', async () => {
+      const message: MessageInput = {
+        chat_id: 100,
+        message_id: 1,
+        text: 'Original',
+        message_type: 'text',
+        date: Date.now(),
+        raw_json: '{}',
+      }
+
+      // Insert original message
+      cache.upsert(message)
+      const original = cache.get(100, 1)
+      const originalCreatedAt = original?.created_at
+
+      expect(originalCreatedAt).toBeDefined()
+
+      // Wait a bit to ensure timestamps would differ
+      await new Promise((resolve) => setTimeout(resolve, 10))
+
+      // Update the message
+      cache.upsert({ ...message, text: 'Updated', is_edited: true })
+      const updated = cache.get(100, 1)
+
+      // created_at should be preserved
+      expect(updated?.created_at).toBe(originalCreatedAt)
+      // updated_at should change
+      expect(updated?.updated_at).toBeGreaterThanOrEqual(originalCreatedAt!)
+      // Content should be updated
+      expect(updated?.text).toBe('Updated')
+    })
+
+    it('preserves created_at through multiple updates', async () => {
+      const message: MessageInput = {
+        chat_id: 100,
+        message_id: 1,
+        text: 'Version 1',
+        message_type: 'text',
+        date: Date.now(),
+        raw_json: '{}',
+      }
+
+      // Insert original
+      cache.upsert(message)
+      const original = cache.get(100, 1)
+      const originalCreatedAt = original?.created_at
+
+      // Wait and update multiple times
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      cache.upsert({ ...message, text: 'Version 2' })
+
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      cache.upsert({ ...message, text: 'Version 3' })
+
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      cache.upsert({ ...message, text: 'Version 4' })
+
+      const final = cache.get(100, 1)
+
+      // created_at should still be the original timestamp
+      expect(final?.created_at).toBe(originalCreatedAt)
+      // Content should reflect latest update
+      expect(final?.text).toBe('Version 4')
+      // updated_at should be newer than created_at
+      expect(final?.updated_at).toBeGreaterThan(originalCreatedAt!)
+    })
   })
 
   describe('get', () => {
