@@ -57,7 +57,8 @@ function resolveDataDir(): string {
   return process.env.TELEGRAM_CLI_DATA_DIR ?? join(homedir(), '.telegram-cli')
 }
 
-function getErrorMessage(err: unknown): string {
+/** @internal exported for testing */
+export function getErrorMessage(err: unknown): string {
   if (err instanceof Error) {
     return err.message
   }
@@ -96,7 +97,8 @@ function buildEnvStatus(): SkillEnvStatus {
   }
 }
 
-async function tryStat(path: string): Promise<
+/** @internal exported for testing */
+export async function tryStat(path: string): Promise<
   | {
       exists: true
       isDirectory: boolean
