@@ -212,7 +212,7 @@ describe('SQL Commands', () => {
       const logSpy = spyOn(console, 'log').mockImplementation(() => {})
 
       await run({
-        args: { table: 'users_cache', format: 'text', _: [] },
+        args: { table: 'users_cache', output: 'text', _: [] },
       })
 
       expect(logSpy).toHaveBeenCalled()
@@ -222,14 +222,33 @@ describe('SQL Commands', () => {
       logSpy.mockRestore()
     })
 
-    it('rejects invalid format', async () => {
+    it('prints sql schema for a table', async () => {
+      const { printSchemaCommand } = await import(
+        '../commands/sql/print-schema'
+      )
+      const run = printSchemaCommand.run as CommandRun
+      const logSpy = spyOn(console, 'log').mockImplementation(() => {})
+
+      await run({
+        args: { table: 'users_cache', output: 'sql', _: [] },
+      })
+
+      expect(logSpy).toHaveBeenCalled()
+      const firstCall = logSpy.mock.calls[0]?.[0] as string
+      expect(firstCall).toContain('CREATE TABLE users_cache')
+      expect(firstCall).toContain('-- ')
+
+      logSpy.mockRestore()
+    })
+
+    it('rejects invalid output format', async () => {
       const { printSchemaCommand } = await import(
         '../commands/sql/print-schema'
       )
       const run = printSchemaCommand.run as CommandRun
       await expectCommandError(
         run({
-          args: { table: 'users_cache', format: 'yaml', _: [] },
+          args: { table: 'users_cache', output: 'yaml', _: [] },
         }),
         ErrorCodes.INVALID_ARGS,
       )
@@ -242,7 +261,7 @@ describe('SQL Commands', () => {
       const run = printSchemaCommand.run as CommandRun
       await expectCommandError(
         run({
-          args: { table: 'unknown_table', format: 'json', _: [] },
+          args: { table: 'unknown_table', output: 'json', _: [] },
         }),
         ErrorCodes.SQL_TABLE_NOT_FOUND,
       )

@@ -9,7 +9,7 @@ import {
 } from '../../db/schema-annotations'
 import { ErrorCodes } from '../../types'
 import { error, success } from '../../utils/output'
-import { formatSchemaAsText } from './schema-text'
+import { formatSchemaAsSql, formatSchemaAsText } from './schema-text'
 
 function readTableInfo(db: ReturnType<typeof getCacheDb>, tableName: string) {
   return db.query(`PRAGMA table_info(${tableName})`).all() as Array<{
@@ -49,12 +49,18 @@ function handleSingleTable(tableName: string, format: string): void {
     )
   }
 
+  const db = getCacheDb()
+
   if (format === 'text') {
     console.log(formatSchemaAsText(tableName, annotation))
     return
   }
 
-  const db = getCacheDb()
+  if (format === 'sql') {
+    console.log(formatSchemaAsSql(tableName, annotation, db))
+    return
+  }
+
   const tableInfo = readTableInfo(db, tableName)
   const columns = tableInfo.map((col) => {
     const colAnnotation = annotation.columns[col.name]
@@ -99,6 +105,19 @@ function handleAllTables(format: string): void {
     return
   }
 
+  if (format === 'sql') {
+    const db = getCacheDb()
+    const tableNames = getTableNames()
+    for (const name of tableNames) {
+      const annotation = getTableAnnotation(name)
+      if (annotation) {
+        console.log(formatSchemaAsSql(name, annotation, db))
+        console.log(`\n${'-- '.repeat(27)}\n`)
+      }
+    }
+    return
+  }
+
   success({
     version: SCHEMA_REGISTRY.version,
     tables: Object.keys(SCHEMA_REGISTRY.tables).map((name) => {
@@ -125,29 +144,29 @@ export const printSchemaCommand = defineCommand({
       alias: 't',
       description: 'Show schema for specific table only',
     },
-    format: {
+    output: {
       type: 'string',
-      alias: 'f',
-      description: 'Output format: json, text (default: json)',
+      alias: 'o',
+      description: 'Output format: json, text, sql (default: json)',
       default: 'json',
     },
   },
   async run({ args }) {
-    const format = args.format ?? 'json'
+    const output = args.output ?? 'json'
     const tableName = args.table
 
-    if (format !== 'json' && format !== 'text') {
+    if (output !== 'json' && output !== 'text' && output !== 'sql') {
       error(
         ErrorCodes.INVALID_ARGS,
-        `Invalid format: ${format}. Use 'json' or 'text'.`,
+        `Invalid output: ${output}. Use 'json', 'text', or 'sql'.`,
       )
     }
 
     if (tableName) {
-      handleSingleTable(tableName, format)
+      handleSingleTable(tableName, output)
       return
     }
 
-    handleAllTables(format)
+    handleAllTables(output)
   },
 })

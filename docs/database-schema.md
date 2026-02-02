@@ -4,6 +4,8 @@
 
 This document defines the current on-disk schema used by telegram-cli. It follows these principles:
 
+> **Tip:** Use `tg sql print-schema --output=sql` to get the live schema with annotated comments explaining each column and its semantic type.
+
 1. **Local-first** — all data is stored locally via SQLite
 2. **raw_json for future-proofing** — cached entities keep the original TL object
 3. **Stale-while-revalidate** — cached data is returned immediately, refreshed on demand

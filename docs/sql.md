@@ -62,7 +62,10 @@ tg sql print-schema
 tg sql print-schema --table=users_cache
 
 # Text format (human readable)
-tg sql print-schema --table=users_cache --format=text
+tg sql print-schema --table=users_cache --output=text
+
+# SQL format (annotated DDL with comments)
+tg sql print-schema --table=users_cache --output=sql
 ```
 
 ---
@@ -82,7 +85,7 @@ tg sql print-schema --table=users_cache --format=text
 | Flag | Alias | Description | Default |
 |------|-------|-------------|---------|
 | `--table` | `-t` | Show schema for specific table | All tables |
-| `--format` | `-f` | Output format: `json`, `text` | `json` |
+| `--output` | `-o` | Output format: `json`, `text`, `sql` | `json` |
 
 ---
 
@@ -141,7 +144,7 @@ Returns table metadata with column descriptions, types, and annotations.
 ### Text Format
 
 ```bash
-tg sql print-schema --table=users_cache --format=text
+tg sql print-schema --table=users_cache --output=text
 ```
 
 ```
@@ -162,6 +165,40 @@ Columns:
 Indexes:
   idx_users_cache_username: Fast lookup by @username
 ```
+
+### SQL Format
+
+```bash
+tg sql print-schema --table=users_cache --output=sql
+```
+
+Outputs annotated SQL DDL with inline comments explaining each column:
+
+```sql
+-- Cached Telegram user profiles. Includes contacts, chat participants, and any user encountered.
+-- TTL: 1 week
+CREATE TABLE users_cache (
+  user_id              TEXT         PRIMARY KEY,                                -- Telegram user ID (unique identifier) [bigint_string]
+  username             TEXT        ,                                            -- Telegram @username without the @ symbol [username]
+  first_name           TEXT        ,                                            -- User's first name as set in their profile
+  phone                TEXT        ,                                            -- Phone number (only visible for contacts) [phone]
+  is_contact           INTEGER      DEFAULT 0,                                  -- Whether user is in your contacts list [boolean_int]
+  fetched_at           INTEGER      NOT NULL,                                   -- Unix timestamp (ms) when data was fetched [timestamp]
+  raw_json             TEXT         NOT NULL,                                   -- Complete Telegram User object as JSON [json]
+  ...
+);
+
+-- Fast lookup by @username
+CREATE INDEX idx_users_cache_username ON users_cache(username) WHERE username IS NOT NULL;
+```
+
+SQL comments include:
+- **Table description** as header comment
+- **TTL** if applicable (for cache tables)
+- **Column descriptions** explaining purpose
+- **Semantic type hints** in brackets: `[bigint_string]`, `[timestamp]`, `[json]`, `[boolean_int]`, `[enum]`
+- **Enum values** for enum columns (e.g., `Values: text | photo | video | ...`)
+- **Index descriptions** explaining each index's purpose
 
 ---
 
@@ -228,10 +265,12 @@ tg sql --query="SELECT first_name, last_name, username, phone FROM users_cache W
 ## Implementation
 
 Source files:
-- `src/commands/sql.ts` - Command implementation
+- `src/commands/sql/query.ts` - SQL query command
+- `src/commands/sql/print-schema.ts` - Schema display command
+- `src/commands/sql/schema-text.ts` - Text and SQL format output
 - `src/db/schema-annotations.ts` - Schema metadata registry
 - `src/utils/csv.ts` - CSV formatting utilities
 
 ---
 
-*Last updated: 2026-02-02*
+*Last updated: 2026-02-03*

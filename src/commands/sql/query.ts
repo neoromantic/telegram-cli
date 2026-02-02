@@ -108,7 +108,13 @@ export const sqlQueryCommand = defineCommand({
   subCommands: {
     'print-schema': printSchemaCommand,
   },
-  async run({ args }) {
+  async run({ args, rawArgs }) {
+    // Skip parent command execution if a subcommand was invoked
+    const subCommands = ['print-schema']
+    if (rawArgs?.some((arg) => subCommands.includes(arg))) {
+      return
+    }
+
     const { query, format, limit, limitStr } = parseQueryArgs(args as QueryArgs)
     validateQueryArgs(query, format, limit, limitStr)
 

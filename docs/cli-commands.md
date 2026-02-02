@@ -103,6 +103,7 @@ tg status
 
 tg sql --query "SELECT * FROM users_cache LIMIT 10"
 tg sql print-schema --table=users_cache
+tg sql print-schema --table=users_cache --output=sql  # Annotated DDL
 ```
 
 ## Output Shape
