@@ -14,7 +14,7 @@ import {
 
 import { createTestCacheDatabase } from '../db/schema'
 import { createUsersCache } from '../db/users-cache'
-import { ErrorCodes, type ErrorCode } from '../types'
+import { type ErrorCode, ErrorCodes } from '../types'
 import { resetOutputWriter, setOutputWriter } from '../utils/output'
 
 let testCacheDb: Database
@@ -190,7 +190,9 @@ describe('SQL Commands', () => {
       const { printSchemaCommand } = await import(
         '../commands/sql/print-schema'
       )
-      const run = printSchemaCommand.run as (input: { args: any }) => Promise<void>
+      const run = printSchemaCommand.run as (input: {
+        args: any
+      }) => Promise<void>
 
       await run({
         args: { table: 'users_cache', format: 'json', _: [] },
@@ -206,7 +208,9 @@ describe('SQL Commands', () => {
       const { printSchemaCommand } = await import(
         '../commands/sql/print-schema'
       )
-      const run = printSchemaCommand.run as (input: { args: any }) => Promise<void>
+      const run = printSchemaCommand.run as (input: {
+        args: any
+      }) => Promise<void>
       const logSpy = spyOn(console, 'log').mockImplementation(() => {})
 
       await run({
@@ -224,7 +228,9 @@ describe('SQL Commands', () => {
       const { printSchemaCommand } = await import(
         '../commands/sql/print-schema'
       )
-      const run = printSchemaCommand.run as (input: { args: any }) => Promise<void>
+      const run = printSchemaCommand.run as (input: {
+        args: any
+      }) => Promise<void>
       await expectCommandError(
         run({
           args: { table: 'users_cache', format: 'yaml', _: [] },
@@ -237,7 +243,9 @@ describe('SQL Commands', () => {
       const { printSchemaCommand } = await import(
         '../commands/sql/print-schema'
       )
-      const run = printSchemaCommand.run as (input: { args: any }) => Promise<void>
+      const run = printSchemaCommand.run as (input: {
+        args: any
+      }) => Promise<void>
       await expectCommandError(
         run({
           args: { table: 'unknown_table', format: 'json', _: [] },

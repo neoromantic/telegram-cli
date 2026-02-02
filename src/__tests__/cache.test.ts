@@ -253,11 +253,7 @@ describe('CacheService', () => {
     it('sets and gets entries', () => {
       cacheService.set<UserEntity>('users_cache', 'user_id', '1', baseUser())
 
-      const stored = cacheService.get<UserEntity>(
-        'users_cache',
-        'user_id',
-        '1',
-      )
+      const stored = cacheService.get<UserEntity>('users_cache', 'user_id', '1')
 
       expect(stored?.user_id).toBe('1')
       expect(stored?.username).toBe('cache-user')
@@ -272,11 +268,7 @@ describe('CacheService', () => {
         baseUser({ username: 'updated' }),
       )
 
-      const stored = cacheService.get<UserEntity>(
-        'users_cache',
-        'user_id',
-        '1',
-      )
+      const stored = cacheService.get<UserEntity>('users_cache', 'user_id', '1')
       expect(stored?.username).toBe('updated')
     })
 
