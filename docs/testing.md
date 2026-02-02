@@ -4,11 +4,12 @@ This document covers the implemented testing infrastructure for telegram-cli.
 
 ## Overview
 
-| Type | Location | Count | Purpose |
-|------|----------|-------|---------|
-| Unit Tests | `src/__tests__/*.test.ts` | 139 | Fast, isolated component tests |
-| E2E Tests | `src/__e2e__/*.e2e.test.ts` | 34 | CLI binary execution tests |
-| **Total** | | **173** | ~87% line coverage |
+| Type | Location | Purpose |
+|------|----------|---------|
+| Unit Tests | `src/__tests__/*.test.ts` | Fast, isolated component tests |
+| E2E Tests | `src/__e2e__/*.e2e.test.ts` | CLI execution + exit code behavior |
+
+> For current test counts and coverage, see `progress.md`.
 
 ## Running Tests
 
@@ -38,16 +39,15 @@ Unit tests run without network access using mocked dependencies.
 
 ### Test Patterns
 
-**In-Memory Database**: Each test gets isolated SQLite instance.
+**In-memory database**: Each test gets an isolated SQLite instance.
 
 ```typescript
 import { createTestDatabase } from '../db'
 
 const { accountsDb, db } = createTestDatabase()
-// Fresh database for each test
 ```
 
-**Dependency Injection**: Services use interfaces for testability.
+**Dependency injection**: Services use interfaces for testability.
 
 ```typescript
 const deps: AuthDependencies = {
@@ -56,15 +56,14 @@ const deps: AuthDependencies = {
 }
 ```
 
-### Test Files
+### Core Unit Test Files
 
-| File | Coverage |
-|------|----------|
-| `auth.test.ts` | Authentication flows (phone, QR, logout) |
-| `db.test.ts` | Database operations (CRUD, queries) |
-| `output.test.ts` | Output formatting (JSON, pretty, quiet) |
-| `telegram.test.ts` | Telegram service layer |
-| `types.test.ts` | Type definitions and validation |
+- `auth.test.ts` — authentication flows (phone, QR, logout)
+- `db.test.ts` — database operations
+- `output.test.ts` — JSON/pretty/quiet output formatting
+- `telegram.test.ts` — Telegram service layer
+- `sync-jobs.test.ts` — sync job lifecycle
+- `update-handlers.test.ts` — daemon update handlers
 
 ## E2E Tests
 
@@ -72,82 +71,43 @@ E2E tests execute the CLI binary via `Bun.spawn` to verify actual command behavi
 
 ### Test Isolation
 
-Tests use `TELEGRAM_CLI_DATA_DIR` environment variable to create isolated environments:
+Tests use `TELEGRAM_CLI_DATA_DIR` to create isolated environments:
 
-- Unique temp directory per test in `/tmp/telegram-cli-e2e-tests/`
+- Unique temp directory per test
 - Fresh SQLite database
 - No interference with production data (`~/.telegram-cli/`)
 - Automatic cleanup after each test
 
-### Test Files
+### E2E Files
 
-| File | Tests |
-|------|-------|
-| `help.e2e.test.ts` | `--help`, `--version`, subcommand help, invalid commands |
-| `exit-codes.e2e.test.ts` | Exit codes 0-6 for various error scenarios |
-| `format.e2e.test.ts` | `--format json/pretty/quiet` output behavior |
-| `accounts.e2e.test.ts` | `list`, `switch`, `remove`, `info` commands |
+- `help.e2e.test.ts` — `--help`, subcommand help, invalid commands
+- `exit-codes.e2e.test.ts` — exit codes for common failure modes
+- `format.e2e.test.ts` — `--format` json/pretty/quiet behavior
+- `accounts.e2e.test.ts` — `list`, `switch`, `remove`, `info`
+- `user.e2e.test.ts` — `me`, `user` lookups
+- `commands.e2e.test.ts` — command coverage smoke tests
+- `daemon.e2e.test.ts` — daemon start/stop/status
 
 ### E2E Helpers
 
-**CLI Execution** (`src/__e2e__/helpers/cli.ts`):
+**CLI execution** (`src/__e2e__/helpers/cli.ts`):
 
 ```typescript
 // Run CLI and capture output
 const result = await runCli(['accounts', 'list'])
 // result.stdout, result.stderr, result.exitCode, result.json
-
-// Expect success (exit code 0)
-await runCliSuccess(['accounts', 'list'], options)
-
-// Expect failure with specific exit code
-await runCliFailure(['accounts', 'switch', '--id', '999'], 6, options)
 ```
 
-**Test Environment** (`src/__e2e__/helpers/setup.ts`):
+**Test environment** (`src/__e2e__/helpers/setup.ts`):
 
 ```typescript
 const env = createTestEnvironment('my-test')
 env.initDatabase()
 env.seedAccounts([{ phone: '+1234567890', is_active: true }])
 
-// Run CLI with isolated data directory
 await runCli(['accounts', 'list'], env.getCliOptions())
 
-// Clean up temp directory
 env.cleanup()
-```
-
-### Writing E2E Tests
-
-```typescript
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import { runCliSuccess, runCliFailure } from './helpers/cli'
-import { createTestEnvironment, type TestEnvironment } from './helpers/setup'
-
-describe('E2E: My Feature', () => {
-  let env: TestEnvironment
-
-  beforeEach(() => {
-    env = createTestEnvironment('my-feature')
-    env.initDatabase()
-    env.seedAccounts([{ phone: '+1111111111', is_active: true }])
-  })
-
-  afterEach(() => {
-    env.cleanup()
-  })
-
-  it('should succeed with valid input', async () => {
-    const result = await runCliSuccess(['my-command'], env.getCliOptions())
-    expect(result.json?.success).toBe(true)
-  })
-
-  it('should fail with invalid input', async () => {
-    const result = await runCliFailure(['my-command', '--bad'], 3, env.getCliOptions())
-    expect(result.json?.error?.code).toBe('INVALID_ARGS')
-  })
-})
 ```
 
 ## CI/CD
@@ -184,14 +144,4 @@ Each test should create its own database:
 beforeEach(() => {
   const { accountsDb } = createTestDatabase()
 })
-```
-
-### Mock Not Called
-
-Set up mocks before calling the function under test:
-
-```typescript
-deps.service = mock(() => result)  // Set mock FIRST
-await functionUnderTest(deps)       // Then call
-expect(deps.service).toHaveBeenCalled()
 ```

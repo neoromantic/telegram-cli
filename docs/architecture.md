@@ -14,7 +14,7 @@ telegram-cli is a command-line utility for interacting with Telegram's full API.
 |-----------|--------|-----------|
 | Runtime | Bun | Native SQLite, fast startup, TypeScript-first |
 | Language | TypeScript | Type safety, better DX |
-| Telegram | mtcute | Modern, Bun support, TypeScript-first |
+| Telegram | mtcute (`@mtcute/bun`) | Modern, Bun support, TypeScript-first |
 | CLI | Citty | Lightweight, TypeScript-first |
 | Storage | bun:sqlite | Native, zero deps |
 | Linting | Biome | Fast, all-in-one linter + formatter |
@@ -27,23 +27,31 @@ telegram-cli is a command-line utility for interacting with Telegram's full API.
 - Uses Citty for command parsing
 - Each command is a separate module
 - Commands delegate to services and cache layers
-- Implemented: `auth`, `accounts`, `contacts`, `chats`, `send`, `api`
+- Implemented: `auth`, `accounts`, `contacts`, `chats`, `send`, `api`, `me`, `user`, `daemon`, `status`, `sql`
 
 ### 2. Service Layer (`src/services/`)
-- Business logic
 - Telegram client management
-- State coordination
+- Rate-limit coordination
+- Shared utilities
 
 ### 3. Database Layer (`src/db/`)
-- **Accounts DB** (`data.db`) - Account storage, always initialized
-- **Cache DB** (`cache.db`) - Lazy-initialized via `getCacheDb()`
-- **Cache Services** - `UsersCache`, `ChatsCache` for typed cache access
+- **Accounts DB** (`data.db`) — account records
+- **Cache/Sync DB** (`cache.db`) — users/chats cache, messages, sync jobs/state
+- **Sessions** (`session_<id>.db`) — mtcute session storage per account
+
+> `TELEGRAM_CLI_DATA_DIR` overrides the base data directory (defaults to `~/.telegram-cli`).
 
 ### 4. Cache Services (`src/db/*-cache.ts`)
-- `UsersCache` - User/contact caching with search
-- `ChatsCache` - Dialog/chat caching with filtering
+- `UsersCache` — user/contact caching with search
+- `ChatsCache` — dialog/chat caching with filtering
 - Prepared statements for performance
 - Transaction support for bulk operations
+
+### 5. Daemon & Sync (`src/daemon/`)
+- Long-running daemon process for real-time updates and background message sync
+- Per-account mtcute connections (max 5)
+- Sync jobs for forward catchup and backfill
+- Read-only to Telegram (no mutations)
 
 ## Data Flow
 
@@ -97,148 +105,66 @@ Command Request
 
 ## Database Schema
 
-### Main Database (`data.db`)
+The project uses two SQLite databases under the data directory:
 
-```sql
-CREATE TABLE accounts (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  phone TEXT UNIQUE NOT NULL,
-  name TEXT,
-  session_data TEXT NOT NULL DEFAULT '',
-  is_active INTEGER DEFAULT 0,
-  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-);
-```
+- `data.db` — account records (`accounts` table)
+- `cache.db` — users/chats cache, messages, sync jobs/state, daemon status
 
-### Cache Database (`cache.db`)
-
-The cache database is lazily initialized on first use via `getCacheDb()`.
-
-```sql
--- Users/contacts cache
-CREATE TABLE users_cache (
-  user_id TEXT PRIMARY KEY,
-  username TEXT,
-  first_name TEXT,
-  last_name TEXT,
-  display_name TEXT,
-  phone TEXT,
-  access_hash TEXT,
-  is_contact INTEGER DEFAULT 0,
-  is_bot INTEGER DEFAULT 0,
-  is_premium INTEGER DEFAULT 0,
-  fetched_at INTEGER NOT NULL,
-  raw_json TEXT NOT NULL,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL
-);
-
--- Chats/dialogs cache
-CREATE TABLE chats_cache (
-  chat_id TEXT PRIMARY KEY,
-  type TEXT NOT NULL,  -- 'private', 'group', 'supergroup', 'channel'
-  title TEXT,
-  username TEXT,
-  member_count INTEGER,
-  access_hash TEXT,
-  is_creator INTEGER DEFAULT 0,
-  is_admin INTEGER DEFAULT 0,
-  last_message_id INTEGER,
-  last_message_at INTEGER,
-  fetched_at INTEGER NOT NULL,
-  raw_json TEXT NOT NULL,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL
-);
-
--- Sync state tracking
-CREATE TABLE sync_state (
-  entity_type TEXT PRIMARY KEY,
-  forward_cursor TEXT,
-  backward_cursor TEXT,
-  is_complete INTEGER DEFAULT 0,
-  last_sync_at INTEGER
-);
-
--- Rate limit tracking
-CREATE TABLE rate_limits (
-  method TEXT NOT NULL,
-  window_start INTEGER NOT NULL,
-  call_count INTEGER DEFAULT 1,
-  last_call_at INTEGER,
-  flood_wait_until INTEGER,
-  PRIMARY KEY (method, window_start)
-);
-
--- API activity logging
-CREATE TABLE api_activity (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  timestamp INTEGER NOT NULL,
-  method TEXT NOT NULL,
-  success INTEGER NOT NULL,
-  error_code TEXT,
-  response_ms INTEGER,
-  context TEXT
-);
-```
-
-## Authentication Flow
-
-1. User provides phone number
-2. mtcute sends code request to Telegram
-3. User enters verification code
-4. Optional: 2FA password
-5. Session stored in database
-6. Future sessions restore from database
+For full table definitions, see `docs/database-schema.md`.
 
 ## Command Structure
 
 ```
-telegram-cli <command> [options]
+tg <command> [options]
 
 Commands:
-  auth login          Login to Telegram account
-  auth logout         Logout from account
-  auth status         Check authentication status
+  auth login        Login to Telegram account
+  auth login-qr     Login via QR code
+  auth logout       Logout from account
+  auth status       Check authentication status
 
-  accounts list       List all accounts
-  accounts add        Add new account
-  accounts switch     Switch active account
-  accounts remove     Remove account
+  accounts list     List all accounts
+  accounts switch   Switch active account
+  accounts remove   Remove account
+  accounts info     Show account details
 
-  contacts list       List contacts (cached, --fresh for API)
-  contacts search     Search contacts
-  contacts get        Get contact by ID or @username
+  contacts list     List contacts (cached, --fresh for API)
+  contacts search   Search contacts
+  contacts get      Get contact by ID or @username
 
-  chats list          List dialogs (cached, --fresh for API)
-  chats search        Search chats by title/username
-  chats get           Get chat by ID or @username
+  chats list        List dialogs (cached, --fresh for API)
+  chats search      Search chats by title/username (cache-only)
+  chats get         Get chat by @username
 
-  send                Send message to user/chat
+  send              Send message to user/chat
 
-  api                 Generic API call
+  api               Generic API call
+  me                Show current user
+  user              Lookup user
+  status            Show system status
+  daemon            Start/stop/status daemon
+  sql               Query cache DB (read-only)
 ```
 
 ### Global Flags
 
 | Flag | Description |
 |------|-------------|
-| `--account` | Use specific account (ID, phone, or name) |
-| `--fresh` | Bypass cache, fetch from API |
+| `--format` | Output format: `json`, `pretty`, `quiet` |
 | `--verbose` | Detailed output |
 | `--quiet` | Minimal output |
 
+> `--account` and `--fresh` are **per-command** options where supported.
+
 ## Error Handling Strategy
 
-1. Custom error classes with codes
-2. User-friendly messages
-3. JSON output option for automation
-4. Exit codes for scripting
+1. Consistent JSON output with `success` wrapper
+2. Structured error codes + details
+3. Exit codes for scripting
 
 ## Security Considerations
 
-- Sessions stored locally in SQLite
+- Sessions stored locally in SQLite (`session_<id>.db`)
 - No cloud sync of credentials
 - 2FA support
 - Session revocation support

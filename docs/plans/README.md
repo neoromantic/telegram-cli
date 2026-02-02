@@ -6,13 +6,19 @@ This directory contains detailed implementation plans for telegram-cli features.
 
 ## Document Index
 
+### Status Definitions
+
+- **Planning** — not implemented yet
+- **Partial** — core pieces exist, gaps remain
+- **Implemented** — shipped in current codebase
+
 ### Core Architecture
 
 | Document | Description | Status |
 |----------|-------------|--------|
-| [architecture.md](./architecture.md) | Full system design, CLI/Daemon modes, data flow | Planning |
-| [daemon.md](./daemon.md) | Background sync process, lifecycle, multi-account | Planning |
-| [sync-strategy.md](./sync-strategy.md) | Dual cursors, priorities, real-time + backfill | Planning |
+| [architecture.md](./architecture.md) | Full system design, CLI/Daemon modes, data flow | **Implemented** |
+| [daemon.md](./daemon.md) | Background sync process, lifecycle, multi-account | **Implemented** |
+| [sync-strategy.md](./sync-strategy.md) | Dual cursors, priorities, real-time + backfill | **Implemented** |
 
 ### Features
 
@@ -21,7 +27,7 @@ This directory contains detailed implementation plans for telegram-cli features.
 | [cli-commands.md](./cli-commands.md) | CLI commands: auth, accounts, contacts, chats, send | **Implemented** |
 | [contacts.md](./contacts.md) | Contact management with caching | **Implemented** |
 | [multi-account.md](./multi-account.md) | Per-account storage, labels | Partial |
-| [rate-limiting.md](./rate-limiting.md) | FLOOD_WAIT handling, `tg status` | Partial |
+| [rate-limiting.md](./rate-limiting.md) | FLOOD_WAIT handling, `tg status` | **Implemented** |
 | [ai-integration.md](./ai-integration.md) | Skills, Claude Code, self-install | Planning |
 | [configuration.md](./configuration.md) | config.json, env vars, defaults | Planning |
 | [build-distribution.md](./build-distribution.md) | Publishing, releases, homebrew | **Implemented** |

@@ -6,17 +6,17 @@ This plan outlines how to build, package, and distribute the `tg` CLI as both a 
 
 ## Current State
 
-The project is **partially configured**:
+The project is **mostly configured**:
 
 | Aspect | Status | Notes |
 |--------|--------|-------|
 | `bin` field | ✅ Done | Points to `./src/index.ts` |
 | Shebang | ✅ Done | `#!/usr/bin/env bun` in index.ts |
 | `bun link` | ✅ Works | For local development |
-| Compiled binary | ❌ Missing | No `bun build --compile` script |
-| Cross-platform builds | ❌ Missing | No multi-target support |
+| Compiled binary | ✅ Done | `bun run build` outputs `dist/tg` |
+| Cross-platform builds | ✅ Done | `bun run build:all` |
 | Release automation | ❌ Missing | No GitHub Actions for releases |
-| Installation tests | ❌ Missing | No verification of global install |
+| Installation tests | ✅ Done | `bun run test:build` / `bun run test:install` |
 
 ## Distribution Options Analysis
 
@@ -88,9 +88,9 @@ For initial release, we'll document the workarounds. Code signing can be added l
 
 ## Recommended Implementation
 
-### Phase 1: Local Build Scripts
+### Phase 1: Local Build Scripts (Done)
 
-Add scripts to `package.json`:
+Scripts are already in `package.json`:
 
 ```json
 {
@@ -105,9 +105,9 @@ Add scripts to `package.json`:
 }
 ```
 
-### Phase 2: Cross-Platform Build Script
+### Phase 2: Cross-Platform Build Script (Done)
 
-Create `scripts/build-all.ts`:
+Implemented in `scripts/build-all.ts`:
 
 ```typescript
 import { $ } from 'bun'

@@ -12,7 +12,10 @@ The `tg sql` command provides direct SQL access to the local cache database for 
 
 ## Database Target
 
-The command operates on the **cache database** (`~/.telegram-cli/cache.db`):
+The command operates on the **cache database**:
+
+- Default: `~/.telegram-cli/cache.db`
+- Override: `TELEGRAM_CLI_DATA_DIR=/path` → `/path/cache.db`
 
 | Table | Description | TTL |
 |-------|-------------|-----|
@@ -23,7 +26,7 @@ The command operates on the **cache database** (`~/.telegram-cli/cache.db`):
 | `chat_sync_state` | Per-chat sync progress | N/A |
 | `sync_jobs` | Background sync job queue | N/A |
 | `rate_limits` | API rate limiting data | N/A |
-| `api_activity` | API call audit log | 7 days |
+| `api_activity` | API call audit log | N/A (no automatic cleanup yet) |
 | `daemon_status` | Daemon runtime state | N/A |
 
 **Note:** Account information is stored separately in `data.db`. Use `tg accounts list` for account queries.
