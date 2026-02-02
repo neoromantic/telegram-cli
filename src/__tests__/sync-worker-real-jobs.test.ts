@@ -266,4 +266,315 @@ describe('sync-worker real jobs', () => {
     expect(stored?.status).toBe('failed')
     expect(stored?.error_message).toContain('Unknown job type')
   })
+
+  describe('exception handling', () => {
+    it('handles non-flood API error in forward catchup', async () => {
+      const chatId = 200
+      ctx.chatSyncState.upsert({
+        chat_id: chatId,
+        chat_type: 'private',
+        sync_priority: SyncPriority.High,
+        sync_enabled: true,
+        forward_cursor: 5,
+      })
+
+      const job = ctx.jobsService.create({
+        chat_id: chatId,
+        job_type: SyncJobType.ForwardCatchup,
+        priority: SyncPriority.High,
+      })
+
+      const clientCall = mock(async () => {
+        throw new Error('Network connection lost')
+      })
+      ctx.client = { call: clientCall } as unknown as TelegramClient
+
+      const result = await processForwardCatchupReal(ctx, job)
+
+      expect(result.success).toBe(false)
+      expect(result.messagesFetched).toBe(0)
+      expect(result.error).toBe('Network connection lost')
+      expect(result.rateLimited).toBeUndefined()
+    })
+
+    it('handles flood wait error in forward catchup', async () => {
+      const chatId = 201
+      ctx.chatSyncState.upsert({
+        chat_id: chatId,
+        chat_type: 'private',
+        sync_priority: SyncPriority.High,
+        sync_enabled: true,
+        forward_cursor: 5,
+      })
+
+      const job = ctx.jobsService.create({
+        chat_id: chatId,
+        job_type: SyncJobType.ForwardCatchup,
+        priority: SyncPriority.High,
+      })
+
+      const clientCall = mock(async () => {
+        throw new Error('FLOOD_WAIT_30')
+      })
+      ctx.client = { call: clientCall } as unknown as TelegramClient
+
+      const result = await processForwardCatchupReal(ctx, job)
+
+      expect(result.success).toBe(false)
+      expect(result.messagesFetched).toBe(0)
+      expect(result.rateLimited).toBe(true)
+      expect(result.waitSeconds).toBe(30)
+      expect(ctx.rateLimits.isBlocked(ctx.config.apiMethod)).toBe(true)
+    })
+
+    it('handles non-flood API error in backward history', async () => {
+      const chatId = 202
+      ctx.chatSyncState.upsert({
+        chat_id: chatId,
+        chat_type: 'private',
+        sync_priority: SyncPriority.High,
+        sync_enabled: true,
+        backward_cursor: 100,
+      })
+
+      const job = ctx.jobsService.create({
+        chat_id: chatId,
+        job_type: SyncJobType.BackwardHistory,
+        priority: SyncPriority.High,
+      })
+
+      const clientCall = mock(async () => {
+        throw new Error('Server unreachable')
+      })
+      ctx.client = { call: clientCall } as unknown as TelegramClient
+
+      const result = await processBackwardHistoryReal(ctx, job)
+
+      expect(result.success).toBe(false)
+      expect(result.messagesFetched).toBe(0)
+      expect(result.error).toBe('Server unreachable')
+      expect(result.rateLimited).toBeUndefined()
+    })
+
+    it('handles flood wait error in backward history', async () => {
+      const chatId = 203
+      ctx.chatSyncState.upsert({
+        chat_id: chatId,
+        chat_type: 'private',
+        sync_priority: SyncPriority.High,
+        sync_enabled: true,
+        backward_cursor: 100,
+      })
+
+      const job = ctx.jobsService.create({
+        chat_id: chatId,
+        job_type: SyncJobType.BackwardHistory,
+        priority: SyncPriority.High,
+      })
+
+      const clientCall = mock(async () => {
+        throw new Error('FLOOD_WAIT_60')
+      })
+      ctx.client = { call: clientCall } as unknown as TelegramClient
+
+      const result = await processBackwardHistoryReal(ctx, job)
+
+      expect(result.success).toBe(false)
+      expect(result.messagesFetched).toBe(0)
+      expect(result.rateLimited).toBe(true)
+      expect(result.waitSeconds).toBe(60)
+    })
+
+    it('handles non-flood API error in initial load', async () => {
+      const chatId = 204
+      ctx.chatSyncState.upsert({
+        chat_id: chatId,
+        chat_type: 'private',
+        sync_priority: SyncPriority.High,
+        sync_enabled: true,
+      })
+
+      const job = ctx.jobsService.create({
+        chat_id: chatId,
+        job_type: SyncJobType.InitialLoad,
+        priority: SyncPriority.High,
+      })
+
+      const clientCall = mock(async () => {
+        throw new Error('Timeout exceeded')
+      })
+      ctx.client = { call: clientCall } as unknown as TelegramClient
+
+      const result = await processInitialLoadReal(ctx, job)
+
+      expect(result.success).toBe(false)
+      expect(result.messagesFetched).toBe(0)
+      expect(result.error).toBe('Timeout exceeded')
+      expect(result.rateLimited).toBeUndefined()
+    })
+
+    it('handles flood wait error in initial load', async () => {
+      const chatId = 205
+      ctx.chatSyncState.upsert({
+        chat_id: chatId,
+        chat_type: 'private',
+        sync_priority: SyncPriority.High,
+        sync_enabled: true,
+      })
+
+      const job = ctx.jobsService.create({
+        chat_id: chatId,
+        job_type: SyncJobType.InitialLoad,
+        priority: SyncPriority.High,
+      })
+
+      const clientCall = mock(async () => {
+        throw new Error('FLOOD_WAIT_45')
+      })
+      ctx.client = { call: clientCall } as unknown as TelegramClient
+
+      const result = await processInitialLoadReal(ctx, job)
+
+      expect(result.success).toBe(false)
+      expect(result.messagesFetched).toBe(0)
+      expect(result.rateLimited).toBe(true)
+      expect(result.waitSeconds).toBe(45)
+    })
+
+    it('handles non-Error thrown values in forward catchup', async () => {
+      const chatId = 206
+      ctx.chatSyncState.upsert({
+        chat_id: chatId,
+        chat_type: 'private',
+        sync_priority: SyncPriority.High,
+        sync_enabled: true,
+      })
+
+      const job = ctx.jobsService.create({
+        chat_id: chatId,
+        job_type: SyncJobType.ForwardCatchup,
+        priority: SyncPriority.High,
+      })
+
+      const clientCall = mock(async () => {
+        throw 'string error'
+      })
+      ctx.client = { call: clientCall } as unknown as TelegramClient
+
+      const result = await processForwardCatchupReal(ctx, job)
+
+      expect(result.success).toBe(false)
+      expect(result.error).toBe('string error')
+    })
+
+    it('handles non-Error thrown values in backward history', async () => {
+      const chatId = 207
+      ctx.chatSyncState.upsert({
+        chat_id: chatId,
+        chat_type: 'private',
+        sync_priority: SyncPriority.High,
+        sync_enabled: true,
+      })
+
+      const job = ctx.jobsService.create({
+        chat_id: chatId,
+        job_type: SyncJobType.BackwardHistory,
+        priority: SyncPriority.High,
+      })
+
+      const clientCall = mock(async () => {
+        throw { code: 500 }
+      })
+      ctx.client = { call: clientCall } as unknown as TelegramClient
+
+      const result = await processBackwardHistoryReal(ctx, job)
+
+      expect(result.success).toBe(false)
+      expect(result.error).toBe('[object Object]')
+    })
+
+    it('handles non-Error thrown values in initial load', async () => {
+      const chatId = 208
+      ctx.chatSyncState.upsert({
+        chat_id: chatId,
+        chat_type: 'private',
+        sync_priority: SyncPriority.High,
+        sync_enabled: true,
+      })
+
+      const job = ctx.jobsService.create({
+        chat_id: chatId,
+        job_type: SyncJobType.InitialLoad,
+        priority: SyncPriority.High,
+      })
+
+      const clientCall = mock(async () => {
+        throw 42
+      })
+      ctx.client = { call: clientCall } as unknown as TelegramClient
+
+      const result = await processInitialLoadReal(ctx, job)
+
+      expect(result.success).toBe(false)
+      expect(result.error).toBe('42')
+    })
+  })
+
+  describe('empty messages edge cases', () => {
+    it('returns success with no more when forward catchup gets empty messages', async () => {
+      const chatId = 300
+      ctx.chatSyncState.upsert({
+        chat_id: chatId,
+        chat_type: 'private',
+        sync_priority: SyncPriority.High,
+        sync_enabled: true,
+        forward_cursor: 10,
+      })
+
+      const job = ctx.jobsService.create({
+        chat_id: chatId,
+        job_type: SyncJobType.ForwardCatchup,
+        priority: SyncPriority.High,
+      })
+
+      const clientCall = mock(async () => ({ messages: [] }))
+      ctx.client = { call: clientCall } as unknown as TelegramClient
+
+      const result = await processForwardCatchupReal(ctx, job)
+
+      expect(result.success).toBe(true)
+      expect(result.messagesFetched).toBe(0)
+      expect(result.hasMore).toBe(false)
+
+      const state = ctx.chatSyncState.get(chatId)
+      expect(state?.last_forward_sync).not.toBeNull()
+    })
+
+    it('marks history complete when initial load gets empty messages', async () => {
+      const chatId = 301
+      ctx.chatSyncState.upsert({
+        chat_id: chatId,
+        chat_type: 'private',
+        sync_priority: SyncPriority.High,
+        sync_enabled: true,
+      })
+
+      const job = ctx.jobsService.create({
+        chat_id: chatId,
+        job_type: SyncJobType.InitialLoad,
+        priority: SyncPriority.High,
+      })
+
+      const clientCall = mock(async () => ({ messages: [] }))
+      ctx.client = { call: clientCall } as unknown as TelegramClient
+
+      const result = await processInitialLoadReal(ctx, job)
+
+      expect(result.success).toBe(true)
+      expect(result.messagesFetched).toBe(0)
+
+      const state = ctx.chatSyncState.get(chatId)
+      expect(state?.history_complete).toBe(1)
+    })
+  })
 })
