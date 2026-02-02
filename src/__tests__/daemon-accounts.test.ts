@@ -8,7 +8,10 @@ import {
   scheduleReconnect,
   setupSignalHandlers,
 } from '../daemon/daemon-accounts'
-import { createDaemonRuntime, type DaemonContext } from '../daemon/daemon-context'
+import {
+  createDaemonRuntime,
+  type DaemonContext,
+} from '../daemon/daemon-context'
 import type { AccountConnectionState } from '../daemon/types'
 
 class MockEvent<T extends (...args: any[]) => void> {

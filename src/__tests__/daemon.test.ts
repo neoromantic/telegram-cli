@@ -2,7 +2,7 @@
  * Tests for daemon lifecycle (no module mocks)
  */
 import { afterEach, describe, expect, it } from 'bun:test'
-import { writeFileSync, rmSync, mkdirSync } from 'node:fs'
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { createDaemon } from '../daemon/daemon'
 import { DaemonExitCode } from '../daemon/types'
@@ -25,8 +25,7 @@ function createAccountsDb(
 
   return {
     getAll: () => normalized,
-    getById: (id: number) =>
-      normalized.find((acc) => acc.id === id) ?? null,
+    getById: (id: number) => normalized.find((acc) => acc.id === id) ?? null,
     getByPhone: (phone: string) =>
       normalized.find((acc) => acc.phone === phone) ?? null,
     getByUserId: () => null,

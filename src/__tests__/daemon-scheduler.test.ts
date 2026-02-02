@@ -9,11 +9,10 @@ import {
   initializeScheduler,
   processJobs,
 } from '../daemon/daemon-scheduler'
-import { SyncJobType, SyncPriority } from '../db/sync-schema'
 import { getCacheDb } from '../db'
 import { createTestDatabase } from '../db/index.ts'
 import { initCacheSchema } from '../db/schema'
-import { initSyncSchema } from '../db/sync-schema'
+import { initSyncSchema, SyncJobType, SyncPriority } from '../db/sync-schema'
 
 function createLogger() {
   return {

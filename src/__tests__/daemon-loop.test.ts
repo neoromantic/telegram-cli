@@ -5,9 +5,9 @@ import { describe, expect, it, mock } from 'bun:test'
 import type { DaemonContext } from '../daemon/daemon-context'
 import { createDaemonRuntime } from '../daemon/daemon-context'
 import { mainLoop } from '../daemon/daemon-loop'
-import { createMessagesCache } from '../db/messages-cache'
-import { createChatSyncStateService } from '../db/chat-sync-state'
 import { getCacheDb } from '../db'
+import { createChatSyncStateService } from '../db/chat-sync-state'
+import { createMessagesCache } from '../db/messages-cache'
 
 function createLogger() {
   return {

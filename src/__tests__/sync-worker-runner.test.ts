@@ -2,8 +2,8 @@
  * Tests for sync worker runner
  */
 import { afterEach, describe, expect, it, mock } from 'bun:test'
-import { createSyncWorkerRunner } from '../daemon/sync-worker-runner'
 import type { RealSyncWorker } from '../daemon/sync-worker-real'
+import { createSyncWorkerRunner } from '../daemon/sync-worker-runner'
 
 function createImmediateTimeout() {
   const delays: number[] = []

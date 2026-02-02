@@ -169,9 +169,7 @@ describe('sync-worker real jobs', () => {
     const clientCall = mock(async (payload: Record<string, unknown>) => {
       expect(payload.offsetId).toBe(20)
       return {
-        messages: [
-          { _: 'message', id: 15, date: 1699999999, message: 'old' },
-        ],
+        messages: [{ _: 'message', id: 15, date: 1699999999, message: 'old' }],
       }
     })
 
@@ -232,9 +230,7 @@ describe('sync-worker real jobs', () => {
     })
 
     const clientCall = mock(async () => ({
-      messages: [
-        { _: 'message', id: 3, date: 1700000002, message: 'a' },
-      ],
+      messages: [{ _: 'message', id: 3, date: 1700000002, message: 'a' }],
     }))
     ctx.client = { call: clientCall } as any
     ctx.config.batchSize = 5
