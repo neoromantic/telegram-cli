@@ -84,7 +84,7 @@ A complete Telegram CLI client for developers and AI agents. Installable via `bu
   - [x] Test isolation via `TELEGRAM_CLI_DATA_DIR`
   - [x] Help/format/accounts/exit-code tests
 - [x] Build & distribution scripts
-- **Total: 1033 tests (953 unit + 80 E2E), ~85% line coverage**
+- **Total: 1072 tests (992 unit + 80 E2E), ~76% line coverage**
 - [ ] Snapshot testing setup
 - [ ] Mock HTTP layer
 - [ ] Integration test suite with TELEGRAM_TEST_ACCOUNT env var
@@ -583,21 +583,19 @@ The daemon has **NO contact synchronization**:
 
 ### 📊 Test Coverage Gaps
 
-**87 missing test scenarios identified:**
+**85 missing test scenarios identified:**
 
 | Category | Count | Examples |
 |----------|-------|----------|
 | Untested Edge Cases | 32 | Empty arrays, null cursors, duplicate IDs |
 | Missing Error Scenarios | 10 | Database failures, partial batch errors |
 | Missing Integration Tests | 12 | Full sync cycle, scheduler + worker |
-| Untested Code Paths | 17 | `createRealSyncWorker`, `buildInputPeer` |
+| Untested Code Paths | 15 | `createRealSyncWorker` |
 | Missing Boundary Tests | 16 | Message ID=0, negative chat IDs, MAX_SAFE_INTEGER |
 
 **Critical untested code:**
 - `createRealSyncWorker()` - zero tests
 - `createSyncWorkerRunner()` - zero tests
-- `buildInputPeer()` - zero tests
-- `extractFloodWaitSeconds()` - zero tests
 
 ---
 
