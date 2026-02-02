@@ -9,7 +9,6 @@ import {
   type Contact,
   type ErrorCode,
   ErrorCodes,
-  type GlobalOptions,
   type Output,
   type OutputFormat,
   type PaginatedResult,
@@ -75,16 +74,6 @@ describe('Types Module', () => {
     it('should allow OutputFormat type', () => {
       const formats: OutputFormat[] = ['json', 'pretty', 'quiet']
       expect(formats).toHaveLength(3)
-    })
-
-    it('should allow GlobalOptions type', () => {
-      const options: GlobalOptions = {
-        account: '1',
-        format: 'json',
-        verbose: true,
-      }
-
-      expect(options.verbose).toBe(true)
     })
 
     it('should allow Contact type', () => {

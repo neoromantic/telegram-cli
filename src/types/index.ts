@@ -19,13 +19,6 @@ export interface Account {
 /** Output format options */
 export type OutputFormat = 'json' | 'pretty' | 'quiet'
 
-/** Global CLI options */
-export interface GlobalOptions {
-  account?: string
-  format?: OutputFormat
-  verbose?: boolean
-}
-
 /** Result wrapper for consistent output */
 export interface Result<T> {
   success: true
