@@ -8,6 +8,16 @@ The CLI supports an optional JSON config file for app-wide settings such as
 active account selection and cache TTLs. Environment variables remain the
 source of truth for Telegram API credentials.
 
+## Environment Variables
+
+| Variable | Purpose |
+|----------|---------|
+| `TELEGRAM_API_ID` | Telegram API ID |
+| `TELEGRAM_API_HASH` | Telegram API hash |
+| `TELEGRAM_CLI_DATA_DIR` | Override data directory |
+| `MTCUTE_LOG_LEVEL` | mtcute log level |
+| `VERBOSE` | Verbose logging (`1`) |
+
 ## Storage Layout
 
 Default data directory: `~/.telegram-cli` (override with `TELEGRAM_CLI_DATA_DIR`).

@@ -96,18 +96,41 @@ tg skill validate
 tg skill install
 ```
 
-Example output (manifest):
+### Skill Manifest
+
+`tg skill manifest` returns the manifest used for agent integration. `tg skill install`
+writes the manifest to `<dataDir>/skill.json` (default `~/.telegram-cli/skill.json`,
+override with `TELEGRAM_CLI_DATA_DIR`).
+
+Fields:
+- `name`
+- `description`
+- `install_command`
+- `entrypoint`
+- `version` (CLI version)
+- `output` (always `json`)
+
+Example output:
 
 ```json
 {
   "success": true,
   "data": {
     "name": "telegram-cli",
+    "description": "Agent-friendly Telegram CLI",
+    "install_command": "bun install -g telegram-cli",
     "entrypoint": "tg",
+    "version": "<cli-version>",
     "output": "json"
   }
 }
 ```
+
+`tg skill validate` performs local checks only (environment variables and data
+directory access). It does not make network calls.
+
+`tg skill install` writes the manifest to the default location and returns
+metadata about the write.
 
 ### Cache Behavior
 

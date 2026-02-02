@@ -12,8 +12,8 @@ For implemented features, see the `docs/` directory.
 
 | Document | Description | Status |
 |----------|-------------|--------|
-| [ai-integration.md](./ai-integration.md) | Skills, Claude Code, self-install | Partial |
-| [multi-account.md](./multi-account.md) | Per-account storage, labels | Partial |
+| [ai-integration.md](./ai-integration.md) | Claude Code skill + remaining AI tasks | Partial |
+| [multi-account.md](./multi-account.md) | Per-account storage + account limits | Partial |
 | [testing.md](./testing.md) | Integration tests + snapshots roadmap | Partial |
 | [core-infrastructure.md](./core-infrastructure.md) | Store/config patterns | Partial |
 | [groups.md](./groups.md) | Group operations | Planning |

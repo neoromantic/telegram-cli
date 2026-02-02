@@ -1,7 +1,7 @@
 /**
  * Type definitions for the caching system
  *
- * Based on docs/plans/caching.md and docs/plans/database-schema.md
+ * Based on docs/caching.md and docs/database-schema.md
  */
 
 // =============================================================================

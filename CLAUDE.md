@@ -565,21 +565,25 @@ Global Options:
 ## Documentation Links
 
 ### Implementation Docs (Completed)
+- [Architecture](docs/architecture.md)
+- [Daemon](docs/daemon.md)
+- [Sync Strategy](docs/sync-strategy.md)
+- [CLI Commands](docs/cli-commands.md)
+- [Rate Limiting](docs/rate-limiting.md)
+- [Configuration](docs/configuration.md)
+- [Build & Distribution](docs/build-distribution.md)
 - [Authentication](docs/auth.md)
 - [Caching](docs/caching.md)
 - [Database Schema](docs/database-schema.md)
 - [Testing](docs/testing.md)
 
 ### Planning Docs
-- [Architecture](docs/plans/architecture.md)
-- [Daemon](docs/plans/daemon.md)
-- [Sync Strategy](docs/plans/sync-strategy.md)
-- [CLI Commands](docs/plans/cli-commands.md)
-- [Rate Limiting](docs/plans/rate-limiting.md)
 - [AI Integration](docs/plans/ai-integration.md)
-- [Configuration](docs/plans/configuration.md)
 - [Multi-Account](docs/plans/multi-account.md)
-- [Build & Distribution](docs/plans/build-distribution.md)
+- [Testing](docs/plans/testing.md)
+- [Core Infrastructure](docs/plans/core-infrastructure.md)
+- [Groups](docs/plans/groups.md)
+- [Channel Tags](docs/plans/channel-tags.md)
 
 ---
 

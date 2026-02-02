@@ -4,12 +4,16 @@ Agent-friendly Telegram CLI with a local cache and full API access. Built on Bun
 
 ## Features
 
-- 🧑‍💻 Multi-account support with per-account SQLite databases
-- 🔄 Daemon for real-time sync (read-only) + CLI for mutations
+- 🧑‍💻 Multi-account management (`tg accounts`, `--account`)
+- 🔐 Authentication helpers (`tg auth`)
+- 🔄 Read-only daemon for real-time sync + CLI for mutations (`tg daemon`, `tg send`)
 - 🧩 Full Telegram API access via `tg api`
 - ⚡ Cache-first UX (stale-while-revalidate) with `--fresh`
+- ⏱️ Rate-limit tracking for safer API usage
 - 🔍 Full-text search (FTS5) over cached messages
+- 🗂️ Contacts, chats, and users browsing (`tg contacts`, `tg chats`, `tg me`, `tg user`)
 - 🗄️ Read-only SQL access to the cache (`tg sql`) with annotated schema output
+- 🧭 Config + status tooling (`tg config`, `tg status`)
 - 🤖 Agent-friendly JSON output + stable error schema
 - 🧠 Skill integration (`tg skill manifest|validate|install`)
 - 🧰 Modern stack: Bun runtime, TypeScript, mtcute
@@ -63,13 +67,17 @@ tg api account.checkUsername --username myuser
 ```bash
 tg <command> [options]
 
+tg accounts list
 tg contacts list --limit 50
+tg chats list --limit 20
 tg messages search --query "hello"
 tg sql --query "SELECT * FROM users_cache LIMIT 10"
 tg daemon start
+tg status
+tg config path
 ```
 
-Common global options: `--account`, `--format`, `--fresh`, `--verbose`, `--quiet`
+Global options: `--format`, `--verbose`, `--quiet`. Many commands also accept `--account`; cache-aware commands accept `--fresh` (see `tg <command> --help`).
 
 ## Output Formats
 

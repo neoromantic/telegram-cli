@@ -2,7 +2,7 @@
  * Rate limiting service for Telegram API calls
  *
  * Implements window-based rate tracking and flood wait handling
- * as described in docs/plans/rate-limiting.md
+ * as described in docs/rate-limiting.md
  */
 import type { Database, Statement } from 'bun:sqlite'
 import { ApiActivityRow, RateLimitRow } from './schema'
