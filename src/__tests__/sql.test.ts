@@ -3,7 +3,7 @@
  */
 import { describe, expect, it } from 'bun:test'
 
-import { applyQueryLimit, isReadOnlyQuery } from '../commands/sql'
+import { applyQueryLimit, isReadOnlyQuery } from '../commands/sql/helpers'
 import {
   getColumnAnnotation,
   getColumnNames,
