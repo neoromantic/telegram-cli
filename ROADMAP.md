@@ -103,7 +103,7 @@ A complete Telegram CLI client for developers and AI agents. Installable via `bu
 
 ### ✅ Recently Fixed (2026-02-02)
 
-The following 16 issues have been resolved:
+The following 21 issues have been resolved:
 
 | Issue | Description | Fix |
 |-------|-------------|-----|
@@ -117,9 +117,14 @@ The following 16 issues have been resolved:
 | #9 | Failed jobs never cleaned up | Added cleanupFailed() method |
 | #10 | INSERT OR REPLACE loses created_at | Use ON CONFLICT DO UPDATE to preserve timestamp |
 | #11 | No reconnection after health check failure | Exponential backoff reconnection |
+| #15 | Inter-job delay measured from job start | Update lastJobProcessTime after execution |
+| #16 | Health check too chatty | Run less often and skip when activity is recent |
 | #17 | No shutdown timeout | 30-second timeout with force exit |
+| #18 | Job state transitions not validated | Require expected status and confirm changes |
 | #19 | interBatchDelayMs config never used | Implemented delay between pagination calls |
 | #20 | High priority chats miss initial load | Include high priority in initial load |
+| #21 | Status services created every loop | Reuse cached daemon status service |
+| #22 | Error stack traces lost | Log full error stacks when available |
 | #25 | Forward from peerChat not handled | Added peerChat handling in message parser |
 | #27 | Cannot reset cursors to NULL | Added resetSyncState() method |
 | docs | CLAUDE.md missing files | Updated file structure section |
@@ -128,6 +133,8 @@ The following 16 issues have been resolved:
 - Modularized command implementations into focused subfolders (chats/send/user/sql/status) with shared helpers.
 - Modularized daemon implementation (context/logger/loop/scheduler/accounts/utils) and split real worker helpers/types/jobs.
 - Added shared formatting helpers for status output.
+- Reduced daemon health-check load and reused cached daemon status service in the main loop.
+- Added job status transition validation and improved daemon error logging with stack traces.
 - Delete events without chat IDs now resolve via cache lookup; ambiguous IDs remain skipped (see #28).
 - Full verification suite run (lint, typecheck, unit, E2E, build, install, qlty smells).
 
@@ -383,7 +390,7 @@ const data: NewMessageData = {
 
 ---
 
-#### 15. `lastJobProcessTime` Set Before Execution
+#### 15. ✅ FIXED - `lastJobProcessTime` Set Before Execution
 **Location:** `src/daemon/daemon-scheduler.ts`
 
 **Problem:**
@@ -394,18 +401,18 @@ const result = await executor.execute(job)  // Takes time
 
 **Impact:** Inter-job delay is calculated from job START, not job END. If a job takes 5 seconds and delay is 3 seconds, next job starts immediately.
 
-**Fix:** Set `lastJobProcessTime = Date.now()` AFTER successful execution.
+**Fix:** Set `lastJobProcessTime = Date.now()` after job completion/attempt.
 
 ---
 
-#### 16. Health Check Uses Expensive `getMe()` API Call
+#### 16. ✅ FIXED - Health Check Uses Expensive `getMe()` API Call
 **Location:** `src/daemon/daemon-loop.ts`
 
 **Problem:** Calls `client.getMe()` every 10 seconds for EACH connected account.
 
 **Impact:** Contributes to rate limiting, especially with 5 accounts.
 
-**Fix:** Use lighter health check (connection state) or increase interval to 60+ seconds.
+**Fix:** Increase health check cadence to ~60s and skip when recent activity is observed.
 
 ---
 
@@ -420,7 +427,7 @@ const result = await executor.execute(job)  // Takes time
 
 ---
 
-#### 18. State Transitions Not Validated
+#### 18. ✅ FIXED - State Transitions Not Validated
 **Location:** `src/db/sync-jobs.ts` (`markRunning`, `markCompleted`, `markFailed`)
 
 **Problem:** No validation that transitions are valid:
@@ -428,7 +435,7 @@ const result = await executor.execute(job)  // Takes time
 - Can mark `pending` job as `completed` (skipping running)
 - No error if job doesn't exist
 
-**Fix:** Add `WHERE status = $expected_status` and check `result.changes === 1`.
+**Fix:** Add `WHERE status = $expected_status`, return success boolean, and handle failed transitions.
 
 ---
 
@@ -458,7 +465,7 @@ const mediumChats = chatSyncState.getChatsByPriority(SyncPriority.Medium)
 
 ---
 
-#### 21. Services Created Every Loop Iteration
+#### 21. ✅ FIXED - Services Created Every Loop Iteration
 **Location:** `src/daemon/daemon-loop.ts`
 
 **Problem:**
@@ -471,7 +478,7 @@ while (!state.shutdownRequested) {
 
 **Impact:** Unnecessary object creation, GC pressure in long-running daemon.
 
-**Fix:** Create services once at startup, reuse in loop.
+**Fix:** Cache daemon status service in runtime and reuse inside the loop.
 
 ---
 
@@ -488,12 +495,12 @@ while (!state.shutdownRequested) {
 
 ### P3: Low Severity / Enhancements
 
-#### 22. Error Stack Traces Lost
+#### 22. ✅ FIXED - Error Stack Traces Lost
 **Location:** `src/daemon/daemon-accounts.ts`, `src/daemon/daemon-loop.ts`, `src/daemon/handlers.ts`
 
 **Problem:** `logger.error(\`Error: ${err}\`)` only logs message, not stack trace.
 
-**Fix:** Use `err.stack` or proper error serialization.
+**Fix:** Log errors through a formatter that prefers stack traces when available.
 
 ---
 
