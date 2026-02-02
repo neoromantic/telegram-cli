@@ -20,8 +20,8 @@ A complete Telegram CLI client for developers and AI agents. Installable via `bu
 - [x] Set up Biome for linting
 - [x] Set up pre-commit hooks (lint, typecheck, test)
 - [x] Refactor current implementation
-- [ ] Improve `--help` outputs
-- [ ] Add `--verbose` / `--quiet` flags
+- [x] Improve `--help` outputs
+- [x] Add `--verbose` / `--quiet` flags
 
 ### Phase 2: Daemon
 - [x] Implement `tg daemon start/stop/status`
@@ -84,7 +84,7 @@ A complete Telegram CLI client for developers and AI agents. Installable via `bu
   - [x] Test isolation via `TELEGRAM_CLI_DATA_DIR`
   - [x] Help/format/accounts/exit-code tests
 - [x] Build & distribution scripts
-- **Total: 1030 tests (950 unit + 80 E2E), ~85% line coverage**
+- **Total: 1033 tests (953 unit + 80 E2E), ~85% line coverage**
 - [ ] Snapshot testing setup
 - [ ] Mock HTTP layer
 - [ ] Integration test suite with TELEGRAM_TEST_ACCOUNT env var
@@ -103,7 +103,7 @@ A complete Telegram CLI client for developers and AI agents. Installable via `bu
 
 ### ✅ Recently Fixed (2026-02-02)
 
-The following 21 issues have been resolved:
+The following 27 issues have been resolved:
 
 | Issue | Description | Fix |
 |-------|-------------|-----|
@@ -114,9 +114,12 @@ The following 21 issues have been resolved:
 | #5 | raw_json never stored | Pass and serialize raw message object |
 | #6 | Backward cursor = 0 infinite loop | Skip backward sync when no valid cursor exists |
 | #7 | edit_date never stored | Added edit_date parameter to updateText() |
+| #8 | Job deduplication ignores running jobs | Treat running jobs as active for dedupe checks |
 | #9 | Failed jobs never cleaned up | Added cleanupFailed() method |
 | #10 | INSERT OR REPLACE loses created_at | Use ON CONFLICT DO UPDATE to preserve timestamp |
 | #11 | No reconnection after health check failure | Exponential backoff reconnection |
+| #12 | Hardcoded chat type 'private' | Use realtime chat type when seeding sync state |
+| #13 | forwardFromId never populated | Extract forward sender from raw forward header |
 | #15 | Inter-job delay measured from job start | Update lastJobProcessTime after execution |
 | #16 | Health check too chatty | Run less often and skip when activity is recent |
 | #17 | No shutdown timeout | 30-second timeout with force exit |
@@ -125,6 +128,9 @@ The following 21 issues have been resolved:
 | #20 | High priority chats miss initial load | Include high priority in initial load |
 | #21 | Status services created every loop | Reuse cached daemon status service |
 | #22 | Error stack traces lost | Log full error stacks when available |
+| #14 | CLI commands bypass rate limiting database | Wrap CLI API calls with RateLimitsService |
+| #24 | messageType oversimplified | Map realtime message types to specific media kinds |
+| #26 | Service messages treated as regular | Tag service messages as `service` type |
 | #25 | Forward from peerChat not handled | Added peerChat handling in message parser |
 | #27 | Cannot reset cursors to NULL | Added resetSyncState() method |
 | docs | CLAUDE.md missing files | Updated file structure section |
@@ -135,6 +141,11 @@ The following 21 issues have been resolved:
 - Added shared formatting helpers for status output.
 - Reduced daemon health-check load and reused cached daemon status service in the main loop.
 - Added job status transition validation and improved daemon error logging with stack traces.
+- Added CLI rate-limit coordination and `--quiet` flag support for help output parity.
+- Improved realtime message type classification (including service messages).
+- Prevented duplicate sync jobs by treating running jobs as active during dedupe checks.
+- Propagated realtime chat types and forward-from attribution into update handlers.
+- Added parseRawMessage unit coverage and refreshed sync-strategy plan checklist.
 - Delete events without chat IDs now resolve via cache lookup; ambiguous IDs remain skipped (see #28).
 - Full verification suite run (lint, typecheck, unit, E2E, build, install, qlty smells).
 
@@ -283,7 +294,7 @@ WHERE chat_id = $chat_id AND message_id = $message_id
 
 ---
 
-#### 8. Job Deduplication Only Checks Pending Status
+#### 8. ✅ FIXED - Job Deduplication Only Checks Pending Status
 **Location:** `src/db/sync-jobs.ts:76-80`
 
 **Problem:**
@@ -295,7 +306,7 @@ hasPendingJobForChat(chatId: number, jobType: SyncJobType): boolean {
 
 **Impact:** Can create duplicate jobs while one is already running, causing parallel syncs for the same chat.
 
-**Fix:** Check both `pending` AND `running` statuses, or rename to `hasActiveJobForChat()`.
+**Fix:** Treat `pending` and `running` as active in job dedupe checks (`hasActiveJobForChat`).
 
 ---
 
@@ -343,7 +354,7 @@ DELETE FROM sync_jobs WHERE status = $status AND completed_at < $before
 
 ---
 
-#### 12. Hardcoded Chat Type 'private'
+#### 12. ✅ FIXED - Hardcoded Chat Type 'private'
 **Location:** `src/daemon/handlers.ts` (`ensureSyncState`)
 
 **Problem:**
@@ -355,12 +366,12 @@ When a new message arrives for an unknown chat, it defaults to `private`. This a
 
 **Impact:** Channels and groups get wrong sync priority (treated as DMs).
 
-**Fix:** Pass chat type through `NewMessageData` or infer from chat ID (negative = group/channel).
+**Fix:** Pass realtime chat type through `NewMessageData` when seeding sync state.
 
 ---
 
-#### 13. `forwardFromId` Never Populated
-**Location:** `src/daemon/daemon.ts:172-182`
+#### 13. ✅ FIXED - `forwardFromId` Never Populated
+**Location:** `src/daemon/daemon-accounts.ts` (realtime handlers)
 
 **Problem:** The `NewMessageData` has a `forwardFromId` field, but daemon never extracts it:
 ```typescript
@@ -371,13 +382,13 @@ const data: NewMessageData = {
 
 **Impact:** Forwarded message attribution is lost.
 
-**Fix:** Extract from `msg.forward?.sender?.id` or similar.
+**Fix:** Extract forward sender from the raw forward header and store `forwardFromId`.
 
 ---
 
 ### P2: Medium Severity Issues
 
-#### 14. CLI Commands Bypass Rate Limiting Database
+#### 14. ✅ FIXED - CLI Commands Bypass Rate Limiting Database
 **Location:** `src/commands/contacts.ts`, `send.ts`, `user.ts`, `chats.ts`, `api.ts`
 
 **Problem:** CLI commands make direct `client.call()` without:
@@ -386,7 +397,7 @@ const data: NewMessageData = {
 
 **Impact:** CLI and daemon don't coordinate rate limits. CLI can trigger FLOOD_WAIT that affects daemon sync.
 
-**Mitigation:** CLI uses mtcute's built-in `floodWaiter` middleware, but no cross-process coordination.
+**Fix:** CLI wraps `client.call()` with `RateLimitsService` checks and logs activity/flood waits for shared coordination.
 
 ---
 
@@ -513,12 +524,12 @@ while (!state.shutdownRequested) {
 
 ---
 
-#### 24. `messageType` Oversimplified
+#### 24. ✅ FIXED - `messageType` Oversimplified
 **Location:** `src/daemon/daemon-accounts.ts`
 
 **Problem:** `messageType: msg.media ? 'media' : 'text'` loses specificity.
 
-**Enhancement:** Detect specific types (photo, video, document, sticker, etc.).
+**Fix:** Detect specific media types in realtime handlers and map to known message types.
 
 ---
 
@@ -531,12 +542,12 @@ while (!state.shutdownRequested) {
 
 ---
 
-#### 26. No Service Message Filtering
+#### 26. ✅ FIXED - No Service Message Filtering
 **Location:** `src/daemon/daemon-accounts.ts`
 
 **Problem:** Service messages (user joined, left, title changed) processed as regular messages.
 
-**Enhancement:** Check `msg.isService` and handle appropriately.
+**Fix:** Tag service messages as `service` type so consumers can filter them.
 
 ---
 
@@ -572,21 +583,20 @@ The daemon has **NO contact synchronization**:
 
 ### 📊 Test Coverage Gaps
 
-**88 missing test scenarios identified:**
+**87 missing test scenarios identified:**
 
 | Category | Count | Examples |
 |----------|-------|----------|
 | Untested Edge Cases | 32 | Empty arrays, null cursors, duplicate IDs |
 | Missing Error Scenarios | 10 | Database failures, partial batch errors |
 | Missing Integration Tests | 12 | Full sync cycle, scheduler + worker |
-| Untested Code Paths | 18 | `createRealSyncWorker`, `buildInputPeer`, `parseRawMessage` |
+| Untested Code Paths | 17 | `createRealSyncWorker`, `buildInputPeer` |
 | Missing Boundary Tests | 16 | Message ID=0, negative chat IDs, MAX_SAFE_INTEGER |
 
 **Critical untested code:**
 - `createRealSyncWorker()` - zero tests
 - `createSyncWorkerRunner()` - zero tests
 - `buildInputPeer()` - zero tests
-- `parseRawMessage()` - zero tests
 - `extractFloodWaitSeconds()` - zero tests
 
 ---
@@ -596,8 +606,8 @@ The daemon has **NO contact synchronization**:
 | File | Issue | Status |
 |------|-------|--------|
 | `CLAUDE.md` | Missing 9 daemon/db files from file structure | ✅ Fixed |
-| `progress.md` | Test count discrepancy | ✅ Fixed (now 1030 tests) |
-| `docs/plans/sync-strategy.md` | Implementation phase checkboxes outdated |
+| `progress.md` | Test count discrepancy | ✅ Fixed (now 1033 tests) |
+| `docs/plans/sync-strategy.md` | Implementation phase checkboxes outdated | ✅ Fixed |
 
 **Missing from CLAUDE.md file structure:**
 - `src/daemon/types.ts`

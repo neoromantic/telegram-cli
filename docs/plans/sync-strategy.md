@@ -58,7 +58,7 @@ Channels                | NO        | On request   | On request
 -- Chat sync state table
 CREATE TABLE chat_sync_state (
     chat_id             INTEGER PRIMARY KEY,
-    chat_type           TEXT NOT NULL,        -- 'dm', 'group', 'supergroup', 'channel'
+    chat_type           TEXT NOT NULL,        -- 'private', 'group', 'supergroup', 'channel'
     member_count        INTEGER,
 
     -- Cursors (message IDs)
@@ -927,24 +927,24 @@ full_sync_interval = 24
 ## Implementation Phases
 
 ### Phase 1: Core Infrastructure
-- [ ] Database schema for sync state
-- [ ] Cursor data structures and persistence
-- [ ] Basic forward cursor logic
+- [x] Database schema for sync state
+- [x] Cursor data structures and persistence
+- [x] Basic forward cursor logic
 
 ### Phase 2: Real-time Sync
-- [ ] Forward catchup on startup
-- [ ] Real-time update processing
+- [x] Forward catchup on startup
+- [x] Real-time update processing
 - [ ] Contact list sync
 
 ### Phase 3: History Sync
-- [ ] Backward cursor implementation
-- [ ] Priority queue for sync jobs
-- [ ] Rate limiting integration
+- [x] Backward cursor implementation
+- [x] Priority queue for sync jobs
+- [x] Rate limiting integration
 
 ### Phase 4: Monitoring
-- [ ] Progress tracking
-- [ ] `tg status` command
-- [ ] Error reporting and recovery
+- [x] Progress tracking
+- [x] `tg status` command
+- [x] Error reporting and recovery
 
 ### Phase 5: Polish
 - [ ] Configuration options

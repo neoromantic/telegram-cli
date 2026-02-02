@@ -2,7 +2,7 @@
 
 ## Current Status: Phase 5 Complete - Sync System Implementation
 
-**Last updated**: 2026-02-02 (modularization + verification complete)
+**Last updated**: 2026-02-02 (sync dedupe + realtime metadata fixes, new tests)
 
 ## What's Working
 
@@ -36,7 +36,7 @@
 
 ### 📊 Test Coverage
 
-- **1030 total tests** (950 unit + 80 E2E)
+- **1033 total tests** (953 unit + 80 E2E)
 - **~85% line coverage**
 - **~80% function coverage**
 
@@ -48,6 +48,13 @@
 - `bun run test:e2e`
 - `bun run test:build`
 - `bun run test:install`
+- `qlty smells`
+
+### ✅ Additional Verification (2026-02-02)
+
+- `bun run typecheck`
+- `bun test src/__tests__/sync-jobs.test.ts src/__tests__/sync-worker-real-helpers.test.ts src/__tests__/update-handlers.test.ts`
+- `bun test src/__e2e__/commands.e2e.test.ts`
 - `qlty smells`
 
 ### 🗄️ Database Layer (New)
