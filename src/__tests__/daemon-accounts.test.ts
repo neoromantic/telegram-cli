@@ -6,6 +6,8 @@ import type { DeleteMessageUpdate, Message, TelegramClient } from '@mtcute/bun'
 import {
   closeClientSafe,
   removeEventHandlers,
+  resolveRealtimeMessageType,
+  resolveSyncChatType,
   scheduleReconnect,
   setupSignalHandlers,
 } from '../daemon/daemon-accounts'
@@ -169,6 +171,133 @@ describe('reconnect scheduling', () => {
     scheduleReconnect(ctx, accountState)
 
     expect(accountState.nextReconnectAt).toBeUndefined()
+  })
+})
+
+describe('resolveRealtimeMessageType', () => {
+  it('returns service type for service messages', () => {
+    const result = resolveRealtimeMessageType({ isService: true })
+    expect(result).toEqual({ messageType: 'service', hasMedia: false })
+  })
+
+  it('returns service type for service messages even with media present', () => {
+    const result = resolveRealtimeMessageType({
+      isService: true,
+      media: { type: 'photo' },
+    })
+    expect(result).toEqual({ messageType: 'service', hasMedia: false })
+  })
+
+  it('returns text type for messages without media', () => {
+    const result = resolveRealtimeMessageType({})
+    expect(result).toEqual({ messageType: 'text', hasMedia: false })
+  })
+
+  it('returns text type for messages with null media', () => {
+    const result = resolveRealtimeMessageType({ media: null })
+    expect(result).toEqual({ messageType: 'text', hasMedia: false })
+  })
+
+  it('returns unknown type for media without type property', () => {
+    const result = resolveRealtimeMessageType({ media: {} })
+    expect(result).toEqual({ messageType: 'unknown', hasMedia: true })
+  })
+
+  it('returns unknown type for unrecognized media types', () => {
+    const result = resolveRealtimeMessageType({
+      media: { type: 'bizarre_new_type' },
+    })
+    expect(result).toEqual({ messageType: 'unknown', hasMedia: true })
+  })
+
+  it('maps known media types correctly', () => {
+    const knownTypes = [
+      { input: 'photo', expected: 'photo' },
+      { input: 'video', expected: 'video' },
+      { input: 'document', expected: 'document' },
+      { input: 'sticker', expected: 'sticker' },
+      { input: 'voice', expected: 'voice' },
+      { input: 'audio', expected: 'audio' },
+      { input: 'poll', expected: 'poll' },
+      { input: 'contact', expected: 'contact' },
+      { input: 'location', expected: 'location' },
+      { input: 'live_location', expected: 'location' },
+      { input: 'venue', expected: 'venue' },
+      { input: 'game', expected: 'game' },
+      { input: 'invoice', expected: 'invoice' },
+      { input: 'webpage', expected: 'webpage' },
+      { input: 'dice', expected: 'dice' },
+    ]
+
+    for (const { input, expected } of knownTypes) {
+      const result = resolveRealtimeMessageType({ media: { type: input } })
+      expect(result).toEqual({ messageType: expected, hasMedia: true })
+    }
+  })
+})
+
+describe('resolveSyncChatType', () => {
+  it('returns undefined for null chat', () => {
+    const result = resolveSyncChatType(null)
+    expect(result).toBeUndefined()
+  })
+
+  it('returns undefined for undefined chat', () => {
+    const result = resolveSyncChatType(undefined)
+    expect(result).toBeUndefined()
+  })
+
+  it('returns private for user type', () => {
+    const result = resolveSyncChatType({ type: 'user' })
+    expect(result).toBe('private')
+  })
+
+  it('returns group for basic group chatType', () => {
+    const result = resolveSyncChatType({ type: 'chat', chatType: 'group' })
+    expect(result).toBe('group')
+  })
+
+  it('returns supergroup for supergroup chatType', () => {
+    const result = resolveSyncChatType({ type: 'chat', chatType: 'supergroup' })
+    expect(result).toBe('supergroup')
+  })
+
+  it('returns supergroup for gigagroup chatType', () => {
+    const result = resolveSyncChatType({ type: 'chat', chatType: 'gigagroup' })
+    expect(result).toBe('supergroup')
+  })
+
+  it('returns supergroup for monoforum chatType', () => {
+    const result = resolveSyncChatType({ type: 'chat', chatType: 'monoforum' })
+    expect(result).toBe('supergroup')
+  })
+
+  it('returns channel for channel chatType', () => {
+    const result = resolveSyncChatType({ type: 'chat', chatType: 'channel' })
+    expect(result).toBe('channel')
+  })
+
+  it('returns group for unknown chatType (default case)', () => {
+    const result = resolveSyncChatType({
+      type: 'chat',
+      chatType: 'some_future_type',
+    })
+    expect(result).toBe('group')
+  })
+
+  it('returns group for chat type without chatType property', () => {
+    const result = resolveSyncChatType({ type: 'chat' })
+    expect(result).toBe('group')
+  })
+
+  it('returns undefined for unknown type (neither user nor chat)', () => {
+    const result = resolveSyncChatType({ type: 'bot' })
+    expect(result).toBeUndefined()
+  })
+
+  it('returns undefined for empty object', () => {
+    const result = resolveSyncChatType({})
+    expect(result).toBeUndefined()
   })
 })
 

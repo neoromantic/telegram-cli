@@ -9,6 +9,7 @@ import {
   extractForwardFromId,
   type RawMessageFwdHeader,
 } from '../utils/message-parser'
+import { wrapClientCallWithRecordReplay } from '../utils/telegram-record-replay'
 import type { DaemonContext } from './daemon-context'
 import {
   calculateReconnectDelay,
@@ -40,7 +41,7 @@ const MEDIA_TYPE_MAP: Record<string, string> = {
   dice: 'dice',
 }
 
-function resolveRealtimeMessageType(msg: {
+export function resolveRealtimeMessageType(msg: {
   isService?: boolean
   media?: { type?: string } | null
 }): { messageType: string; hasMedia: boolean } {
@@ -63,7 +64,7 @@ function resolveRealtimeMessageType(msg: {
   }
 }
 
-function resolveSyncChatType(
+export function resolveSyncChatType(
   chat:
     | {
         type?: string
@@ -315,6 +316,10 @@ export async function connectAccount(
       storage: sessionPath,
       logLevel: ctx.verbosity === 'verbose' ? 5 : 2,
     })
+    wrapClientCallWithRecordReplay(client, {
+      accountId,
+      dataDir: ctx.dataDir,
+    })
 
     await client.start({
       phone: async () => {
@@ -444,6 +449,10 @@ export async function attemptReconnect(
       apiHash: telegramConfig.apiHash,
       storage: sessionPath,
       logLevel: ctx.verbosity === 'verbose' ? 5 : 2,
+    })
+    wrapClientCallWithRecordReplay(client, {
+      accountId: accountState.accountId,
+      dataDir: ctx.dataDir,
     })
 
     await client.start({
