@@ -30,6 +30,7 @@ import {
   accountsDb as defaultAccountsDb,
   getDataDir,
 } from '../db'
+import { wrapClientCallWithRecordReplay } from '../utils/telegram-record-replay'
 
 // Store active clients by account ID
 const clients = new Map<number, TelegramClient>()
@@ -139,7 +140,7 @@ export function createDefaultClientFactory(
 
   return {
     create(accountId: number): TelegramClient {
-      return new TelegramClient({
+      const client = new TelegramClient({
         apiId: config.apiId,
         apiHash: config.apiHash,
         storage: getSessionPath(accountId, dataDir),
@@ -148,6 +149,8 @@ export function createDefaultClientFactory(
           middlewares,
         },
       })
+      wrapClientCallWithRecordReplay(client, { accountId, dataDir })
+      return client
     },
   }
 }

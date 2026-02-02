@@ -1,4 +1,4 @@
-import { defineCommand } from 'citty'
+import { defineCommand, runCommand } from 'citty'
 
 import { getCacheDb } from '../../db'
 import { getTableNames } from '../../db/schema-annotations'
@@ -9,25 +9,28 @@ import { applyQueryLimit, isReadOnlyQuery } from './helpers'
 import { printSchemaCommand } from './print-schema'
 
 type QueryArgs = {
+  command?: string
   query?: string
-  format?: string
+  output?: string
   limit?: string
   _?: string[]
 }
 
 function parseQueryArgs(args: QueryArgs) {
   const positionalArgs = args._ ?? []
-  const query = args.query ?? positionalArgs[0]
-  const format = args.format ?? 'json'
+  const query =
+    args.query ??
+    (positionalArgs.length > 0 ? positionalArgs.join(' ') : undefined)
+  const output = args.output ?? 'json'
   const limitStr = args.limit ?? '1000'
   const limit = Number.parseInt(limitStr, 10)
 
-  return { query, format, limit, limitStr }
+  return { query, output, limit, limitStr }
 }
 
 function validateQueryArgs(
   query: string | undefined,
-  format: string,
+  output: string,
   limit: number,
   limitStr: string,
 ): void {
@@ -38,10 +41,10 @@ function validateQueryArgs(
     )
   }
 
-  if (format !== 'json' && format !== 'csv') {
+  if (output !== 'json' && output !== 'csv') {
     error(
       ErrorCodes.INVALID_ARGS,
-      `Invalid format: ${format}. Use 'json' or 'csv'.`,
+      `Invalid output: ${output}. Use 'json' or 'csv'.`,
     )
   }
 
@@ -86,14 +89,19 @@ export const sqlQueryCommand = defineCommand({
     description: 'Execute read-only SQL queries on the cache database',
   },
   args: {
+    command: {
+      type: 'positional',
+      description: 'Optional subcommand (print-schema)',
+      required: false,
+    },
     query: {
       type: 'string',
       alias: 'q',
       description: 'SQL query to execute (required unless using a subcommand)',
     },
-    format: {
+    output: {
       type: 'enum',
-      alias: 'f',
+      alias: 'o',
       description: 'Output format: json or csv',
       options: ['json', 'csv'],
       default: 'json',
@@ -105,18 +113,36 @@ export const sqlQueryCommand = defineCommand({
       default: '1000',
     },
   },
-  subCommands: {
-    'print-schema': printSchemaCommand,
-  },
   async run({ args, rawArgs }) {
-    // Skip parent command execution if a subcommand was invoked
-    const subCommands = ['print-schema']
-    if (rawArgs?.some((arg) => subCommands.includes(arg))) {
+    const sqlArgs = args as QueryArgs
+    const positionalArgs = sqlArgs._ ?? []
+    const command =
+      typeof sqlArgs.command === 'string' ? sqlArgs.command : positionalArgs[0]
+
+    if (command === 'print-schema') {
+      if (sqlArgs.query) {
+        error(
+          ErrorCodes.INVALID_ARGS,
+          'print-schema does not accept --query. Use tg sql print-schema [--table=...]',
+        )
+      }
+
+      const idx = rawArgs?.indexOf('print-schema') ?? -1
+      const remainingArgs =
+        idx >= 0 ? rawArgs.slice(idx + 1) : (rawArgs?.slice(1) ?? [])
+      await runCommand(printSchemaCommand, { rawArgs: remainingArgs })
       return
     }
 
-    const { query, format, limit, limitStr } = parseQueryArgs(args as QueryArgs)
-    validateQueryArgs(query, format, limit, limitStr)
+    if (sqlArgs.query && positionalArgs.length > 0) {
+      error(
+        ErrorCodes.INVALID_ARGS,
+        'Unexpected extra arguments. Wrap SQL in quotes or pass only --query.',
+      )
+    }
+
+    const { query, output, limit, limitStr } = parseQueryArgs(sqlArgs)
+    validateQueryArgs(query, output, limit, limitStr)
 
     try {
       const db = getCacheDb()
@@ -124,7 +150,7 @@ export const sqlQueryCommand = defineCommand({
       const rows = db.query(finalQuery).all() as Record<string, unknown>[]
       const columns = rows.length > 0 ? Object.keys(rows[0]!) : []
 
-      if (format === 'csv') {
+      if (output === 'csv') {
         const csv = stringifyCsv(rows, columns)
         console.log(csv)
         return
