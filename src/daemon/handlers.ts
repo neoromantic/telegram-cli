@@ -24,6 +24,7 @@ export interface UpdateContext {
  */
 export interface NewMessageData {
   chatId: number
+  chatType?: SyncChatType
   messageId: number
   fromId?: number
   text?: string
@@ -136,14 +137,15 @@ function toMessageInput(data: NewMessageData): MessageInput {
 function ensureSyncState(
   chatSyncState: ChatSyncStateService,
   chatId: number,
-  chatType: SyncChatType = 'private',
+  chatType?: SyncChatType,
 ): void {
   const existing = chatSyncState.get(chatId)
   if (!existing) {
-    const policy = determineSyncPolicy(chatType)
+    const resolvedChatType = chatType ?? 'private'
+    const policy = determineSyncPolicy(resolvedChatType)
     chatSyncState.upsert({
       chat_id: chatId,
-      chat_type: chatType,
+      chat_type: resolvedChatType,
       sync_priority: policy.priority,
       sync_enabled: policy.enabled,
     })
@@ -165,7 +167,7 @@ function updateForwardCursor(
 }
 
 async function handleNewMessageImpl(deps: HandlerDeps, data: NewMessageData) {
-  ensureSyncState(deps.chatSyncState, data.chatId)
+  ensureSyncState(deps.chatSyncState, data.chatId, data.chatType)
 
   const input = toMessageInput(data)
   deps.messagesCache.upsert(input)
@@ -228,7 +230,9 @@ function processChatBatch(
   chatId: number,
   chatMessages: NewMessageData[],
 ): void {
-  ensureSyncState(deps.chatSyncState, chatId)
+  const chatType =
+    chatMessages.find((message) => message.chatType)?.chatType ?? undefined
+  ensureSyncState(deps.chatSyncState, chatId, chatType)
 
   const inputs = chatMessages.map(toMessageInput)
   deps.messagesCache.upsertBatch(inputs)

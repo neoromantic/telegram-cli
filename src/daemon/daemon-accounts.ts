@@ -3,7 +3,12 @@ import { type DeleteMessageUpdate, TelegramClient } from '@mtcute/bun'
 import { getCacheDb } from '../db'
 import { createChatSyncStateService } from '../db/chat-sync-state'
 import { createMessagesCache } from '../db/messages-cache'
+import type { SyncChatType } from '../db/sync-schema'
 import { getDefaultConfig, validateConfig } from '../services/telegram'
+import {
+  extractForwardFromId,
+  type RawMessageFwdHeader,
+} from '../utils/message-parser'
 import type { DaemonContext } from './daemon-context'
 import {
   calculateReconnectDelay,
@@ -56,6 +61,48 @@ function resolveRealtimeMessageType(msg: {
     messageType: MEDIA_TYPE_MAP[mediaType] ?? 'unknown',
     hasMedia: true,
   }
+}
+
+function resolveSyncChatType(
+  chat:
+    | {
+        type?: string
+        chatType?: string
+      }
+    | null
+    | undefined,
+): SyncChatType | undefined {
+  let resolved: SyncChatType | undefined
+
+  if (chat?.type === 'user') {
+    resolved = 'private'
+  } else if (chat?.type === 'chat') {
+    switch (chat.chatType) {
+      case 'group':
+        resolved = 'group'
+        break
+      case 'supergroup':
+      case 'gigagroup':
+      case 'monoforum':
+        resolved = 'supergroup'
+        break
+      case 'channel':
+        resolved = 'channel'
+        break
+      default:
+        resolved = 'group'
+        break
+    }
+  }
+
+  return resolved
+}
+
+function resolveForwardFromId(message: {
+  raw?: { fwdFrom?: RawMessageFwdHeader }
+}): number | undefined {
+  if (!message.raw?.fwdFrom) return undefined
+  return extractForwardFromId(message.raw.fwdFrom)
 }
 
 export async function closeClientSafe(
@@ -115,8 +162,15 @@ export function setupEventHandlers(
     onNewMessage: (msg) => {
       const ctxLocal = createContext()
       const { messageType, hasMedia } = resolveRealtimeMessageType(msg)
+      const chatType = resolveSyncChatType(msg.chat)
+      const forwardFromId = resolveForwardFromId(
+        msg as {
+          raw?: { fwdFrom?: RawMessageFwdHeader }
+        },
+      )
       const data: NewMessageData = {
         chatId: msg.chat.id,
+        chatType,
         messageId: msg.id,
         fromId: msg.sender?.id,
         text: msg.text,
@@ -125,6 +179,7 @@ export function setupEventHandlers(
         replyToId: msg.replyToMessage?.id ?? undefined,
         messageType,
         hasMedia,
+        forwardFromId,
       }
 
       updateHandlers.handleNewMessage(ctxLocal, data).catch((err) => {

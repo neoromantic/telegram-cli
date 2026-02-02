@@ -115,6 +115,47 @@ describe('UpdateHandlers', () => {
       expect(cached?.raw_json).toBe('{}')
     })
 
+    it('seeds sync state using provided chat type', async () => {
+      const ctx: UpdateContext = {
+        accountId: 1,
+        receivedAt: Date.now(),
+      }
+
+      await handlers.handleNewMessage(ctx, {
+        chatId: 200,
+        chatType: 'channel',
+        messageId: 1,
+        fromId: 123,
+        text: 'Channel post',
+        date: Date.now(),
+        isOutgoing: false,
+      })
+
+      const state = chatSyncState.get(200)
+      expect(state?.chat_type).toBe('channel')
+      expect(state?.sync_enabled).toBe(0)
+    })
+
+    it('stores forward_from_id when provided', async () => {
+      const ctx: UpdateContext = {
+        accountId: 1,
+        receivedAt: Date.now(),
+      }
+
+      await handlers.handleNewMessage(ctx, {
+        chatId: 300,
+        messageId: 7,
+        fromId: 123,
+        forwardFromId: 456,
+        text: 'Forwarded message',
+        date: Date.now(),
+        isOutgoing: false,
+      })
+
+      const cached = messagesCache.get(300, 7)
+      expect(cached?.forward_from_id).toBe(456)
+    })
+
     it('updates forward cursor when message is newer', async () => {
       // Set up initial sync state
       chatSyncState.upsert({
