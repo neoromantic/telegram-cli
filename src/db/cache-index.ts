@@ -64,12 +64,6 @@ export {
 // Note: SyncStateRow is exported from schema.ts (not types.ts) to avoid duplicate
 
 // =============================================================================
-// Cache Service - from cache.ts
-// =============================================================================
-
-export { CacheService, createCacheService } from './cache'
-
-// =============================================================================
 // Users Cache - from users-cache.ts
 // =============================================================================
 
