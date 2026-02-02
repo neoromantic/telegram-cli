@@ -14,6 +14,7 @@ import type {
   RealJobResult,
   RealSyncWorkerContext,
 } from './sync-worker-real-types'
+import { processJobWithHandlers } from './sync-worker-utils'
 
 export async function processForwardCatchupReal(
   ctx: RealSyncWorkerContext,
@@ -291,75 +292,36 @@ export async function processInitialLoadReal(
   return result
 }
 
+async function processFullSyncReal(
+  ctx: RealSyncWorkerContext,
+  job: SyncJobRow,
+): Promise<RealJobResult> {
+  const result = await processInitialLoadReal(ctx, job)
+  if (result.success && !result.historyComplete) {
+    return { ...result, hasMore: true }
+  }
+  return result
+}
+
+const JOB_HANDLERS: Partial<
+  Record<
+    SyncJobType,
+    (ctx: RealSyncWorkerContext, job: SyncJobRow) => Promise<RealJobResult>
+  >
+> = {
+  [SyncJobType.ForwardCatchup]: processForwardCatchupReal,
+  [SyncJobType.BackwardHistory]: processBackwardHistoryReal,
+  [SyncJobType.InitialLoad]: processInitialLoadReal,
+  [SyncJobType.FullSync]: processFullSyncReal,
+}
+
 export async function processJobReal(
   ctx: RealSyncWorkerContext,
   job: SyncJobRow,
 ): Promise<RealJobResult> {
-  const started = ctx.jobsService.markRunning(job.id)
-  if (!started) {
-    return {
-      success: false,
-      messagesFetched: 0,
-      error: `Job ${job.id} is not pending`,
-    }
-  }
-
-  try {
-    let result: RealJobResult
-
-    switch (job.job_type) {
-      case SyncJobType.ForwardCatchup:
-        result = await processForwardCatchupReal(ctx, job)
-        break
-      case SyncJobType.BackwardHistory:
-        result = await processBackwardHistoryReal(ctx, job)
-        break
-      case SyncJobType.InitialLoad:
-        result = await processInitialLoadReal(ctx, job)
-        break
-      case SyncJobType.FullSync:
-        result = await processInitialLoadReal(ctx, job)
-        if (result.success && !result.historyComplete) {
-          result.hasMore = true
-        }
-        break
-      default:
-        result = {
-          success: false,
-          messagesFetched: 0,
-          error: `Unknown job type: ${job.job_type}`,
-        }
-    }
-
-    if (result.success) {
-      if (!ctx.jobsService.markCompleted(job.id)) {
-        console.warn(`[sync-worker] Failed to mark job ${job.id} completed`)
-      }
-    } else if (result.rateLimited) {
-      if (
-        !ctx.jobsService.markFailed(
-          job.id,
-          `Rate limited: wait ${result.waitSeconds}s`,
-        )
-      ) {
-        console.warn(`[sync-worker] Failed to mark job ${job.id} failed`)
-      }
-    } else if (result.error) {
-      if (!ctx.jobsService.markFailed(job.id, result.error)) {
-        console.warn(`[sync-worker] Failed to mark job ${job.id} failed`)
-      }
-    }
-
-    return result
-  } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : 'Unknown error'
-    if (!ctx.jobsService.markFailed(job.id, errorMessage)) {
-      console.warn(`[sync-worker] Failed to mark job ${job.id} failed`)
-    }
-    return {
-      success: false,
-      messagesFetched: 0,
-      error: errorMessage,
-    }
-  }
+  return processJobWithHandlers(ctx, job, JOB_HANDLERS, (jobType) => ({
+    success: false,
+    messagesFetched: 0,
+    error: `Unknown job type: ${jobType}`,
+  }))
 }

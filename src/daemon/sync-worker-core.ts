@@ -14,7 +14,7 @@ import type { MessageInput, MessagesCache } from '../db/messages-cache'
 import type { RateLimitsService } from '../db/rate-limits'
 import type { SyncJobsService } from '../db/sync-jobs'
 import { type SyncJobRow, SyncJobType } from '../db/sync-schema'
-import { runOnceBase } from './sync-worker-utils'
+import { processJobWithHandlers, runOnceBase } from './sync-worker-utils'
 
 /**
  * Telegram API message representation (simplified)
@@ -372,71 +372,26 @@ async function processInitialLoad(
   }
 }
 
+const JOB_HANDLERS: Partial<
+  Record<
+    SyncJobType,
+    (ctx: SyncWorkerContext, job: SyncJobRow) => Promise<JobResult>
+  >
+> = {
+  [SyncJobType.ForwardCatchup]: processForwardCatchup,
+  [SyncJobType.BackwardHistory]: processBackwardHistory,
+  [SyncJobType.InitialLoad]: processInitialLoad,
+}
+
 async function processJob(
   ctx: SyncWorkerContext,
   job: SyncJobRow,
 ): Promise<JobResult> {
-  const started = ctx.jobsService.markRunning(job.id)
-  if (!started) {
-    return {
-      success: false,
-      messagesFetched: 0,
-      error: `Job ${job.id} is not pending`,
-    }
-  }
-
-  try {
-    let result: JobResult
-
-    switch (job.job_type) {
-      case SyncJobType.ForwardCatchup:
-        result = await processForwardCatchup(ctx, job)
-        break
-      case SyncJobType.BackwardHistory:
-        result = await processBackwardHistory(ctx, job)
-        break
-      case SyncJobType.InitialLoad:
-        result = await processInitialLoad(ctx, job)
-        break
-      default:
-        result = {
-          success: false,
-          messagesFetched: 0,
-          error: `Unknown job type: ${job.job_type}`,
-        }
-    }
-
-    if (result.success) {
-      if (!ctx.jobsService.markCompleted(job.id)) {
-        console.warn(`[sync-worker] Failed to mark job ${job.id} completed`)
-      }
-    } else if (result.rateLimited) {
-      if (
-        !ctx.jobsService.markFailed(
-          job.id,
-          `Rate limited: wait ${result.waitSeconds}s`,
-        )
-      ) {
-        console.warn(`[sync-worker] Failed to mark job ${job.id} failed`)
-      }
-    } else if (result.error) {
-      if (!ctx.jobsService.markFailed(job.id, result.error)) {
-        console.warn(`[sync-worker] Failed to mark job ${job.id} failed`)
-      }
-    }
-
-    return result
-  } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : 'Unknown error'
-    if (!ctx.jobsService.markFailed(job.id, errorMessage)) {
-      console.warn(`[sync-worker] Failed to mark job ${job.id} failed`)
-    }
-    return {
-      success: false,
-      messagesFetched: 0,
-      error: errorMessage,
-    }
-  }
+  return processJobWithHandlers(ctx, job, JOB_HANDLERS, (jobType) => ({
+    success: false,
+    messagesFetched: 0,
+    error: `Unknown job type: ${jobType}`,
+  }))
 }
 
 async function runOnce(ctx: SyncWorkerContext): Promise<JobResult | null> {

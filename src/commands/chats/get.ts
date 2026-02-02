@@ -31,6 +31,97 @@ function peerToChatType(peer: any): ChatType {
   return 'group'
 }
 
+function resolveAccountId(accountId: string | undefined): number | undefined {
+  if (!accountId) return undefined
+  return Number.parseInt(accountId, 10)
+}
+
+function getCachedChat(
+  chatsCache: ReturnType<typeof createChatsCache>,
+  identifier: string,
+  isUsername: boolean,
+  cacheConfig: ReturnType<typeof getDefaultCacheConfig>,
+) {
+  const cached = isUsername
+    ? chatsCache.getByUsername(identifier)
+    : chatsCache.getById(identifier)
+
+  if (!cached) return null
+
+  const stale = isCacheStale(cached.fetched_at, cacheConfig.staleness.dialogs)
+  return {
+    ...cachedChatToItem(cached),
+    source: 'cache',
+    stale,
+  }
+}
+
+function assertUsernameIdentifier(
+  isUsername: boolean,
+  identifier: string,
+): void {
+  if (isUsername) return
+  error(
+    ErrorCodes.INVALID_ARGS,
+    'Fetching by numeric ID is not yet supported. Use @username instead.',
+    { identifier },
+  )
+}
+
+async function fetchChatFromApi(
+  chatsCache: ReturnType<typeof createChatsCache>,
+  client: ReturnType<typeof wrapClientCallWithRateLimits>,
+  identifier: string,
+) {
+  const resolved = await resolveUsername(client, identifier)
+  const resolvedChat = resolved.chats?.[0]
+  const resolvedUser = resolved.users?.[0]
+
+  if (!resolvedChat && !resolvedUser) {
+    error(
+      ErrorCodes.TELEGRAM_ERROR,
+      `Chat @${normalizeUsername(identifier)} not found`,
+    )
+  }
+
+  if (resolvedUser) {
+    const cacheInput = userToPrivateChatCacheInput(resolvedUser)
+    chatsCache.upsert(cacheInput)
+    return {
+      ...chatRowToItem(cacheInput),
+      source: 'api',
+      stale: false,
+    }
+  }
+
+  const peer = resolvedChat
+  const type = peerToChatType(peer)
+
+  const cacheInput = {
+    chat_id: String(peer.id),
+    type,
+    title: peer.title ?? null,
+    username: peer.username ?? null,
+    member_count: peer.participantsCount ?? null,
+    access_hash: peer.accessHash ? String(peer.accessHash) : null,
+    is_creator: peer.creator ? 1 : 0,
+    is_admin: peer.adminRights ? 1 : 0,
+    last_message_id: null,
+    last_message_at: null,
+    fetched_at: Date.now(),
+    raw_json: JSON.stringify(peer),
+  }
+
+  chatsCache.upsert(cacheInput)
+  verbose('Cached chat data')
+
+  return {
+    ...chatRowToItem(cacheInput),
+    source: 'api',
+    stale: false,
+  }
+}
+
 export const getChatCommand = defineCommand({
   meta: {
     name: 'get',
@@ -54,9 +145,7 @@ export const getChatCommand = defineCommand({
   },
   async run({ args }) {
     const identifier = args.id
-    const accountId = args.account
-      ? Number.parseInt(args.account, 10)
-      : undefined
+    const accountId = resolveAccountId(args.account)
     const fresh = args.fresh ?? false
     const isUsername = isUsernameIdentifier(identifier)
 
@@ -66,21 +155,14 @@ export const getChatCommand = defineCommand({
       const cacheConfig = getDefaultCacheConfig()
 
       if (!fresh) {
-        const cached = isUsername
-          ? chatsCache.getByUsername(identifier)
-          : chatsCache.getById(identifier)
-
+        const cached = getCachedChat(
+          chatsCache,
+          identifier,
+          isUsername,
+          cacheConfig,
+        )
         if (cached) {
-          const stale = isCacheStale(
-            cached.fetched_at,
-            cacheConfig.staleness.dialogs,
-          )
-
-          success({
-            ...cachedChatToItem(cached),
-            source: 'cache',
-            stale,
-          })
+          success(cached)
           return
         }
       }
@@ -91,62 +173,9 @@ export const getChatCommand = defineCommand({
         { context: 'cli:chats.get' },
       )
 
-      if (!isUsername) {
-        error(
-          ErrorCodes.INVALID_ARGS,
-          'Fetching by numeric ID is not yet supported. Use @username instead.',
-        )
-      }
-
-      const resolved = await resolveUsername(client, identifier)
-      const resolvedChat = resolved.chats?.[0]
-      const resolvedUser = resolved.users?.[0]
-
-      if (!resolvedChat && !resolvedUser) {
-        error(
-          ErrorCodes.TELEGRAM_ERROR,
-          `Chat @${normalizeUsername(identifier)} not found`,
-        )
-      }
-
-      if (resolvedUser) {
-        const cacheInput = userToPrivateChatCacheInput(resolvedUser)
-        chatsCache.upsert(cacheInput)
-
-        success({
-          ...chatRowToItem(cacheInput),
-          source: 'api',
-          stale: false,
-        })
-        return
-      }
-
-      const peer = resolvedChat
-      const type = peerToChatType(peer)
-
-      const cacheInput = {
-        chat_id: String(peer.id),
-        type,
-        title: peer.title ?? null,
-        username: peer.username ?? null,
-        member_count: peer.participantsCount ?? null,
-        access_hash: peer.accessHash ? String(peer.accessHash) : null,
-        is_creator: peer.creator ? 1 : 0,
-        is_admin: peer.adminRights ? 1 : 0,
-        last_message_id: null,
-        last_message_at: null,
-        fetched_at: Date.now(),
-        raw_json: JSON.stringify(peer),
-      }
-
-      chatsCache.upsert(cacheInput)
-      verbose('Cached chat data')
-
-      success({
-        ...chatRowToItem(cacheInput),
-        source: 'api',
-        stale: false,
-      })
+      assertUsernameIdentifier(isUsername, identifier)
+      const result = await fetchChatFromApi(chatsCache, client, identifier)
+      success(result)
     } catch (err) {
       if (isRateLimitError(err)) {
         error(
