@@ -122,6 +122,7 @@ export function getExitCode(code: ErrorCode): number {
     INVALID_ARGS: 3,
     NETWORK_ERROR: 4,
     TELEGRAM_ERROR: 5,
+    RATE_LIMITED: 5,
     ACCOUNT_NOT_FOUND: 6,
     NO_ACTIVE_ACCOUNT: 1,
     PHONE_CODE_INVALID: 1,

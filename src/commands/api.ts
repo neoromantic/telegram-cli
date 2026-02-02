@@ -10,6 +10,10 @@ import { getClientForAccount } from '../services/telegram'
 import { ErrorCodes } from '../types'
 import { mergeArgs } from '../utils/args'
 import { error, success } from '../utils/output'
+import {
+  isRateLimitError,
+  wrapClientCallWithRateLimits,
+} from '../utils/telegram-rate-limits'
 
 /**
  * Generic API command
@@ -61,7 +65,10 @@ export const apiCommand = defineCommand({
     }
 
     try {
-      const client = getClientForAccount(accountId)
+      const client = wrapClientCallWithRateLimits(
+        getClientForAccount(accountId),
+        { context: 'cli:api' },
+      )
 
       // Build request parameters
       // Remove known CLI args, keep the rest as API params
@@ -90,6 +97,13 @@ export const apiCommand = defineCommand({
         })
       }
     } catch (err) {
+      if (isRateLimitError(err)) {
+        error(
+          ErrorCodes.RATE_LIMITED,
+          `Rate limited for ${err.method}. Wait ${err.waitSeconds}s before retrying.`,
+          { method: err.method, wait_seconds: err.waitSeconds },
+        )
+      }
       const message = err instanceof Error ? err.message : 'Unknown error'
 
       // Try to extract Telegram error code

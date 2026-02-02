@@ -6,6 +6,10 @@ import { createUsersCache } from '../db/users-cache'
 import { getClientForAccount } from '../services/telegram'
 import { ErrorCodes } from '../types'
 import { error, success, verbose } from '../utils/output'
+import {
+  isRateLimitError,
+  wrapClientCallWithRateLimits,
+} from '../utils/telegram-rate-limits'
 import { resolvePeer } from './send/peer-resolver'
 
 function createRandomId(): bigint {
@@ -114,7 +118,10 @@ export const sendCommand = defineCommand({
       const usersCache = createUsersCache(cacheDb)
       const chatsCache = createChatsCache(cacheDb)
 
-      const client = getClientForAccount(accountId)
+      const client = wrapClientCallWithRateLimits(
+        getClientForAccount(accountId),
+        { context: 'cli:send' },
+      )
 
       verbose(`Resolving recipient: ${recipient}`)
       const { inputPeer, name } = await resolvePeer(
@@ -157,6 +164,13 @@ export const sendCommand = defineCommand({
         silent,
       })
     } catch (err) {
+      if (isRateLimitError(err)) {
+        error(
+          ErrorCodes.RATE_LIMITED,
+          `Rate limited for ${err.method}. Wait ${err.waitSeconds}s before retrying.`,
+          { method: err.method, wait_seconds: err.waitSeconds },
+        )
+      }
       const message = err instanceof Error ? err.message : 'Unknown error'
       handleSendError(recipient, message)
     }

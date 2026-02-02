@@ -8,6 +8,10 @@ import { ErrorCodes } from '../../types'
 import { error, success, verbose } from '../../utils/output'
 import { apiUserToCacheInput } from '../../utils/telegram-mappers'
 import {
+  isRateLimitError,
+  wrapClientCallWithRateLimits,
+} from '../../utils/telegram-rate-limits'
+import {
   apiUserToUserInfo,
   cachedUserToUserInfo,
   findCachedUser,
@@ -128,7 +132,10 @@ export const userCommand = defineCommand({
       }
 
       verbose('Fetching user from API...')
-      const client = getClientForAccount(accountId)
+      const client = wrapClientCallWithRateLimits(
+        getClientForAccount(accountId),
+        { context: 'cli:user.lookup' },
+      )
 
       const user = await resolveUserFromApi(client, parsed)
 
@@ -144,6 +151,13 @@ export const userCommand = defineCommand({
         stale: false,
       })
     } catch (err: any) {
+      if (isRateLimitError(err)) {
+        error(
+          ErrorCodes.RATE_LIMITED,
+          `Rate limited for ${err.method}. Wait ${err.waitSeconds}s before retrying.`,
+          { method: err.method, wait_seconds: err.waitSeconds },
+        )
+      }
       handleUserLookupError(err, args.identifier as string)
     }
   },

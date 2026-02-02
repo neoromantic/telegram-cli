@@ -10,6 +10,10 @@ import { buildCachePaginatedResponse } from '../../utils/cache-pagination'
 import { error, success, verbose } from '../../utils/output'
 import { apiUserToCacheInput } from '../../utils/telegram-mappers'
 import {
+  isRateLimitError,
+  wrapClientCallWithRateLimits,
+} from '../../utils/telegram-rate-limits'
+import {
   CHAT_TYPE_VALUES,
   chatRowToItem,
   dialogToCacheInput,
@@ -113,7 +117,10 @@ export const listChatsCommand = defineCommand({
       }
 
       verbose('Fetching dialogs from Telegram API...')
-      const client = getClientForAccount(accountId)
+      const client = wrapClientCallWithRateLimits(
+        getClientForAccount(accountId),
+        { context: 'cli:chats.list' },
+      )
 
       const { dialogs, users } = await collectDialogs(client)
 
@@ -151,6 +158,13 @@ export const listChatsCommand = defineCommand({
 
       success(response)
     } catch (err) {
+      if (isRateLimitError(err)) {
+        error(
+          ErrorCodes.RATE_LIMITED,
+          `Rate limited for ${err.method}. Wait ${err.waitSeconds}s before retrying.`,
+          { method: err.method, wait_seconds: err.waitSeconds },
+        )
+      }
       const message = err instanceof Error ? err.message : 'Unknown error'
       error(ErrorCodes.TELEGRAM_ERROR, `Failed to fetch chats: ${message}`)
     }

@@ -11,6 +11,11 @@ Telegram enforces strict rate limits on API calls. Exceeding these limits result
 3. **Queue-based operations** - Throttle bulk operations during sync
 4. **Shared coordination** - Daemon and CLI coordinate via shared database
 
+> **Implementation note (2026-02-02):** The current implementation stores flood waits in
+> `rate_limits.flood_wait_until` and logs activity in `api_activity`. The CLI wraps
+> `client.call()` to consult `RateLimitsService` before calls and to record calls/flood waits,
+> so daemon and CLI now coordinate via the shared cache database.
+
 ---
 
 ## Database Schema

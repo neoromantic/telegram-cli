@@ -16,6 +16,10 @@ import {
   apiUserToContact,
   cachedUserToContact,
 } from '../utils/telegram-mappers'
+import {
+  isRateLimitError,
+  wrapClientCallWithRateLimits,
+} from '../utils/telegram-rate-limits'
 
 /**
  * List contacts
@@ -83,7 +87,10 @@ export const listContactsCommand = defineCommand({
 
       // Fetch from API
       verbose('Fetching contacts from Telegram API...')
-      const client = getClientForAccount(accountId)
+      const client = wrapClientCallWithRateLimits(
+        getClientForAccount(accountId),
+        { context: 'cli:contacts.list' },
+      )
 
       const result = await client.call({
         _: 'contacts.getContacts',
@@ -135,6 +142,13 @@ export const listContactsCommand = defineCommand({
 
       success(response)
     } catch (err) {
+      if (isRateLimitError(err)) {
+        error(
+          ErrorCodes.RATE_LIMITED,
+          `Rate limited for ${err.method}. Wait ${err.waitSeconds}s before retrying.`,
+          { method: err.method, wait_seconds: err.waitSeconds },
+        )
+      }
       const message = err instanceof Error ? err.message : 'Unknown error'
       error(ErrorCodes.TELEGRAM_ERROR, `Failed to fetch contacts: ${message}`)
     }
@@ -207,7 +221,10 @@ export const searchContactsCommand = defineCommand({
 
       // Search via API
       verbose(`Searching Telegram API for "${query}"...`)
-      const client = getClientForAccount(accountId)
+      const client = wrapClientCallWithRateLimits(
+        getClientForAccount(accountId),
+        { context: 'cli:contacts.search' },
+      )
 
       const result = await client.call({
         _: 'contacts.search',
@@ -238,6 +255,13 @@ export const searchContactsCommand = defineCommand({
         stale: false,
       })
     } catch (err) {
+      if (isRateLimitError(err)) {
+        error(
+          ErrorCodes.RATE_LIMITED,
+          `Rate limited for ${err.method}. Wait ${err.waitSeconds}s before retrying.`,
+          { method: err.method, wait_seconds: err.waitSeconds },
+        )
+      }
       const message = err instanceof Error ? err.message : 'Unknown error'
       error(ErrorCodes.TELEGRAM_ERROR, `Search failed: ${message}`)
     }
@@ -314,7 +338,10 @@ export const getContactCommand = defineCommand({
 
       // Fetch from API
       verbose(`Fetching user "${identifier}" from Telegram API...`)
-      const client = getClientForAccount(accountId)
+      const client = wrapClientCallWithRateLimits(
+        getClientForAccount(accountId),
+        { context: 'cli:contacts.get' },
+      )
 
       let result: any[]
 
@@ -367,6 +394,13 @@ export const getContactCommand = defineCommand({
         stale: false,
       })
     } catch (err) {
+      if (isRateLimitError(err)) {
+        error(
+          ErrorCodes.RATE_LIMITED,
+          `Rate limited for ${err.method}. Wait ${err.waitSeconds}s before retrying.`,
+          { method: err.method, wait_seconds: err.waitSeconds },
+        )
+      }
       const message = err instanceof Error ? err.message : 'Unknown error'
       error(ErrorCodes.TELEGRAM_ERROR, `Failed to get user: ${message}`)
     }

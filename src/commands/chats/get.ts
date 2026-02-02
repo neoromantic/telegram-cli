@@ -14,6 +14,10 @@ import {
   normalizeUsername,
 } from '../../utils/identifiers'
 import { error, success, verbose } from '../../utils/output'
+import {
+  isRateLimitError,
+  wrapClientCallWithRateLimits,
+} from '../../utils/telegram-rate-limits'
 import { resolveUsername } from '../../utils/telegram-resolve'
 import {
   cachedChatToItem,
@@ -82,7 +86,10 @@ export const getChatCommand = defineCommand({
       }
 
       verbose(`Fetching chat "${identifier}" from Telegram API...`)
-      const client = getClientForAccount(accountId)
+      const client = wrapClientCallWithRateLimits(
+        getClientForAccount(accountId),
+        { context: 'cli:chats.get' },
+      )
 
       if (!isUsername) {
         error(
@@ -141,6 +148,13 @@ export const getChatCommand = defineCommand({
         stale: false,
       })
     } catch (err) {
+      if (isRateLimitError(err)) {
+        error(
+          ErrorCodes.RATE_LIMITED,
+          `Rate limited for ${err.method}. Wait ${err.waitSeconds}s before retrying.`,
+          { method: err.method, wait_seconds: err.waitSeconds },
+        )
+      }
       const message = err instanceof Error ? err.message : 'Unknown error'
       error(ErrorCodes.TELEGRAM_ERROR, `Failed to get chat: ${message}`)
     }
