@@ -56,8 +56,8 @@ export interface SyncJobsService {
   getRunningJobs(): SyncJobRow[]
   /** Get jobs for a specific chat */
   getJobsForChat(chatId: number): SyncJobRow[]
-  /** Check if chat has pending job of given type */
-  hasPendingJobForChat(chatId: number, jobType: SyncJobType): boolean
+  /** Check if chat has pending or running job of given type */
+  hasActiveJobForChat(chatId: number, jobType: SyncJobType): boolean
   /** Clean up old completed jobs */
   cleanupCompleted(olderThanMs: number): number
   /** Clean up old failed jobs */
@@ -154,9 +154,11 @@ export function createSyncJobsService(db: Database): SyncJobsService {
     `)
       .as(SyncJobRow),
 
-    hasPendingJobForChat: db.query(`
+    hasActiveJobForChat: db.query(`
       SELECT 1 FROM sync_jobs
-      WHERE chat_id = $chat_id AND job_type = $job_type AND status = $status
+      WHERE chat_id = $chat_id
+        AND job_type = $job_type
+        AND status IN ($pending_status, $running_status)
       LIMIT 1
     `),
 
@@ -273,11 +275,12 @@ export function createSyncJobsService(db: Database): SyncJobsService {
       return stmts.getJobsForChat.all({ $chat_id: chatId })
     },
 
-    hasPendingJobForChat(chatId: number, jobType: SyncJobType): boolean {
-      const result = stmts.hasPendingJobForChat.get({
+    hasActiveJobForChat(chatId: number, jobType: SyncJobType): boolean {
+      const result = stmts.hasActiveJobForChat.get({
         $chat_id: chatId,
         $job_type: jobType,
-        $status: SyncJobStatus.Pending,
+        $pending_status: SyncJobStatus.Pending,
+        $running_status: SyncJobStatus.Running,
       })
       return result !== null
     },

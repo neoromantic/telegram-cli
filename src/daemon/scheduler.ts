@@ -86,7 +86,7 @@ class SyncSchedulerImpl implements SyncScheduler {
 
   queueForwardCatchup(chatId: number): void {
     if (
-      this.jobsService.hasPendingJobForChat(chatId, SyncJobType.ForwardCatchup)
+      this.jobsService.hasActiveJobForChat(chatId, SyncJobType.ForwardCatchup)
     ) {
       return
     }
@@ -105,7 +105,7 @@ class SyncSchedulerImpl implements SyncScheduler {
     }
 
     if (
-      this.jobsService.hasPendingJobForChat(chatId, SyncJobType.BackwardHistory)
+      this.jobsService.hasActiveJobForChat(chatId, SyncJobType.BackwardHistory)
     ) {
       return
     }
@@ -114,7 +114,7 @@ class SyncSchedulerImpl implements SyncScheduler {
       const cachedCount = this.messagesCache.countByChatId(chatId)
       if (cachedCount === 0) {
         if (
-          !this.jobsService.hasPendingJobForChat(
+          !this.jobsService.hasActiveJobForChat(
             chatId,
             SyncJobType.InitialLoad,
           )
@@ -138,7 +138,7 @@ class SyncSchedulerImpl implements SyncScheduler {
 
   queueInitialLoad(chatId: number, _messageCount: number): void {
     if (
-      this.jobsService.hasPendingJobForChat(chatId, SyncJobType.InitialLoad)
+      this.jobsService.hasActiveJobForChat(chatId, SyncJobType.InitialLoad)
     ) {
       return
     }

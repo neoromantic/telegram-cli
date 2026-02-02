@@ -393,7 +393,7 @@ describe('SyncJobsService', () => {
     })
   })
 
-  describe('hasPendingJobForChat', () => {
+  describe('hasActiveJobForChat', () => {
     it('returns true if chat has pending job of given type', () => {
       service.create({
         chat_id: 100,
@@ -402,14 +402,14 @@ describe('SyncJobsService', () => {
       })
 
       expect(
-        service.hasPendingJobForChat(100, SyncJobType.ForwardCatchup),
+        service.hasActiveJobForChat(100, SyncJobType.ForwardCatchup),
       ).toBe(true)
       expect(
-        service.hasPendingJobForChat(100, SyncJobType.BackwardHistory),
+        service.hasActiveJobForChat(100, SyncJobType.BackwardHistory),
       ).toBe(false)
     })
 
-    it('returns false if job is not pending', () => {
+    it('returns true if job is running', () => {
       const job = service.create({
         chat_id: 100,
         job_type: SyncJobType.ForwardCatchup,
@@ -418,7 +418,21 @@ describe('SyncJobsService', () => {
       service.markRunning(job.id)
 
       expect(
-        service.hasPendingJobForChat(100, SyncJobType.ForwardCatchup),
+        service.hasActiveJobForChat(100, SyncJobType.ForwardCatchup),
+      ).toBe(true)
+    })
+
+    it('returns false if job is not pending or running', () => {
+      const job = service.create({
+        chat_id: 100,
+        job_type: SyncJobType.ForwardCatchup,
+        priority: SyncPriority.High,
+      })
+      service.markRunning(job.id)
+      service.markCompleted(job.id)
+
+      expect(
+        service.hasActiveJobForChat(100, SyncJobType.ForwardCatchup),
       ).toBe(false)
     })
   })
