@@ -3,6 +3,18 @@
  */
 import type { Database } from 'bun:sqlite'
 
+/**
+ * Escape a user query for FTS5 MATCH.
+ * Wraps the query in double quotes to treat it as a literal phrase,
+ * and escapes any internal double quotes.
+ */
+function escapeFts5Query(query: string): string {
+  // Escape internal double quotes by doubling them
+  const escaped = query.replace(/"/g, '""')
+  // Wrap in double quotes to treat as literal phrase
+  return `"${escaped}"`
+}
+
 export interface MessageSearchOptions {
   limit?: number
   offset?: number
@@ -53,7 +65,7 @@ export function createMessagesSearch(db: Database): MessagesSearchService {
       const includeDeleted = options.includeDeleted ?? false
 
       const conditions: string[] = ['message_search MATCH ?']
-      const params: Array<string | number> = [query]
+      const params: Array<string | number> = [escapeFts5Query(query)]
 
       if (!includeDeleted) {
         conditions.push('m.is_deleted = 0')

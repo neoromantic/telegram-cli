@@ -215,4 +215,82 @@ describe('MessagesSearch', () => {
     expect(results3[0]!.message_id).toBe(3)
     expect(results3[0]!.is_deleted).toBe(1)
   })
+
+  it('escapes FTS5 special characters in queries', () => {
+    const now = Date.now()
+
+    usersCache.upsert({
+      user_id: '10',
+      username: 'alice',
+      first_name: 'Alice',
+      last_name: 'Able',
+      fetched_at: now,
+      raw_json: '{}',
+    })
+
+    chatsCache.upsert({
+      chat_id: '-100',
+      type: 'supergroup',
+      title: 'Test Chat',
+      username: 'testchat',
+      member_count: 2,
+      access_hash: null,
+      is_creator: 0,
+      is_admin: 0,
+      last_message_id: null,
+      last_message_at: null,
+      fetched_at: now,
+      raw_json: '{}',
+    })
+
+    // Message with hyphen (Russian "che-nit" slang)
+    messagesCache.upsert({
+      chat_id: -100,
+      message_id: 1,
+      from_id: 10,
+      text: 'привет, че-нить новое?',
+      message_type: 'text',
+      date: now - 1000,
+      raw_json: '{}',
+    })
+
+    // Message with asterisk
+    messagesCache.upsert({
+      chat_id: -100,
+      message_id: 2,
+      from_id: 10,
+      text: 'test*value here',
+      message_type: 'text',
+      date: now - 500,
+      raw_json: '{}',
+    })
+
+    // Message with parentheses
+    messagesCache.upsert({
+      chat_id: -100,
+      message_id: 3,
+      from_id: 10,
+      text: 'function(arg) call',
+      message_type: 'text',
+      date: now - 200,
+      raw_json: '{}',
+    })
+
+    const search = createMessagesSearch(db)
+
+    // Search with hyphen should NOT throw "no such column" error
+    const hyphenResults = search.search('че-нить')
+    expect(hyphenResults).toHaveLength(1)
+    expect(hyphenResults[0]!.message_id).toBe(1)
+
+    // Search with asterisk (would be wildcard without escaping)
+    const asteriskResults = search.search('test*value')
+    expect(asteriskResults).toHaveLength(1)
+    expect(asteriskResults[0]!.message_id).toBe(2)
+
+    // Search with parentheses (would be grouping without escaping)
+    const parenResults = search.search('function(arg)')
+    expect(parenResults).toHaveLength(1)
+    expect(parenResults[0]!.message_id).toBe(3)
+  })
 })
