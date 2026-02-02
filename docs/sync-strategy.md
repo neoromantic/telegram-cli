@@ -1,8 +1,6 @@
-# Telegram CLI Sync Strategy
+# Sync Strategy
 
-> **Status: Implemented (v0.1.0)**
->
-> This document reflects the current sync behavior implemented in `src/daemon/*` and `src/db/*`.
+> **Status: Implemented (v0.1.0)** — current sync behavior implemented in `src/daemon/*` and `src/db/*`.
 
 ## Overview
 

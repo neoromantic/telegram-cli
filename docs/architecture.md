@@ -8,6 +8,40 @@ telegram-cli is a command-line utility for interacting with Telegram's full API.
 - Non-interactive command execution
 - Responsive caching with stale-while-revalidate pattern
 
+## Architecture Diagram (Current)
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                 Telegram Servers (MTProto)               │
+└─────────────────────────────────────────────────────────┘
+          ▲                                      │
+          │ API calls (mutations, queries)       │ Updates
+          │                                      ▼
+┌────────────────────────────┐        ┌────────────────────────────┐
+│        CLI Mode (tg)        │        │      Daemon Mode (tg)       │
+│  - Citty command parser     │        │  - mtcute connections       │
+│  - Cache read/write         │        │  - realtime handlers        │
+│  - Mutations                │        │  - sync job scheduler        │
+└──────────────┬─────────────┘        └──────────────┬─────────────┘
+               │                                     │
+               └──────────────┬──────────────────────┘
+                              ▼
+                      SQLite (WAL mode)
+                       data.db / cache.db
+```
+
+## Data Layout (Current)
+
+Default data directory: `~/.telegram-cli` (override with `TELEGRAM_CLI_DATA_DIR`).
+
+```
+~/.telegram-cli/
+├── data.db            # accounts
+├── cache.db           # cache + sync tables
+├── session_<id>.db    # mtcute session per account
+└── daemon.pid         # daemon PID when running
+```
+
 ## Technology Stack
 
 | Component | Choice | Rationale |
@@ -136,6 +170,8 @@ Commands:
   chats search      Search chats by title/username (cache-only)
   chats get         Get chat by @username
 
+  messages search   Search cached messages (FTS5, --chat/--sender/--includeDeleted)
+
   send              Send message to user/chat
 
   api               Generic API call
@@ -154,7 +190,7 @@ Commands:
 | `--verbose` | Detailed output |
 | `--quiet` | Minimal output |
 
-> `--account` and `--fresh` are **per-command** options where supported.
+> `--account` and `--fresh` are **per-command** options where supported. `--account` accepts an ID, `@username`, or label.
 
 ## Error Handling Strategy
 

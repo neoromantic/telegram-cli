@@ -1,0 +1,60 @@
+# Rate Limiting
+
+> **Status:** Implemented
+
+## Overview
+
+telegram-cli coordinates rate limits across the CLI and daemon via a shared
+SQLite cache database. All API calls are recorded and FLOOD_WAITs are enforced
+before subsequent calls are made.
+
+Key behaviors:
+- Track per-method call counts in rolling windows
+- Record FLOOD_WAITs and block calls until the wait expires
+- Log API activity (success/error) for status output and diagnostics
+
+## Where It Lives
+
+- `src/db/rate-limits.ts` — `RateLimitsService`
+- `src/utils/telegram-rate-limits.ts` — CLI wrapper helpers
+- `src/daemon/*` — daemon job execution uses the same service
+
+## Database Tables (cache.db)
+
+### rate_limits
+Tracks call counts and flood waits per method.
+
+Columns (see `docs/database-schema.md` for full definitions):
+- `method`
+- `window_start`
+- `call_count`
+- `last_call_at`
+- `flood_wait_until`
+
+### api_activity
+Audits API calls (success/errors).
+
+Columns:
+- `timestamp`
+- `method`
+- `success`
+- `error_code`
+- `response_ms`
+- `context`
+
+## Runtime Flow
+
+1. Before an API call, the caller checks `RateLimitsService.isBlocked()`.
+2. If blocked, the call returns a rate-limited result with wait time.
+3. On success, `recordCall()` increments the window count and activity log.
+4. On FLOOD_WAIT errors, `setFloodWait()` records the block in `rate_limits`.
+
+## CLI Integration
+
+CLI commands wrap API calls using `wrapClientCallWithRateLimits()` so manual
+commands and the daemon share the same rate-limit state.
+
+## Notes
+
+- Rate-limit tracking is per-method (e.g., `messages.getHistory`).
+- CLI and daemon share the same `cache.db`, so limits are coordinated.

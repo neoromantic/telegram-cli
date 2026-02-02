@@ -28,7 +28,7 @@ The caching system prioritizes **responsiveness** over absolute freshness. Users
 
 ### Configuration
 
-Defaults are currently hard-coded in `src/db/types.ts`:
+Defaults are defined in `src/db/types.ts` and can be overridden via `config.json`:
 
 ```typescript
 export function getDefaultCacheConfig(): CacheConfig {
@@ -44,7 +44,21 @@ export function getDefaultCacheConfig(): CacheConfig {
 }
 ```
 
-> Configurable TTLs via `config.json` are **planned**, but not yet loaded at runtime.
+Example override:
+
+```json
+{
+  "cache": {
+    "staleness": {
+      "peers": "3d",
+      "dialogs": "2h",
+      "fullInfo": "7d"
+    },
+    "backgroundRefresh": true,
+    "maxCacheAge": "30d"
+  }
+}
+```
 
 ## CLI Behavior
 

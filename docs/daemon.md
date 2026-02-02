@@ -1,8 +1,6 @@
-# Daemon Implementation Plan
+# Daemon
 
-> **Status: Implemented (v0.1.0)**
->
-> This document now reflects the current daemon behavior. For schema details, see `docs/database-schema.md`.
+> **Status: Implemented (v0.1.0)** — current daemon behavior. For schema details, see `docs/database-schema.md`.
 
 ## Overview
 

@@ -1,8 +1,8 @@
 # Development Progress
 
-## Current Status: Phase 5 Complete - Sync System Implementation
+## Current Status: Phase 7 In Progress - AI Skill Integration
 
-**Last updated**: 2026-02-02 (daemon + runner coverage refresh)
+**Last updated**: 2026-02-02 (messages search + FTS5 index)
 
 ## What's Working
 
@@ -11,15 +11,17 @@
 | Feature | Status | Evidence |
 |---------|--------|----------|
 | **Authentication** | ✅ Complete | Phone login, QR code login, logout, status |
-| **Account Management** | ✅ Complete | list, switch, remove, info |
+| **Account Management** | ✅ Complete | list, switch, remove, info, selectors (ID/@username/label) |
 | **Contacts** | ✅ Complete | list, search, get with caching + `--fresh` flag |
 | **Chats/Dialogs** | ✅ Complete | list, search, get with caching + `--fresh` flag |
+| **Message Search** | ✅ Complete | `tg messages search` (FTS5, chat/sender filters, `--includeDeleted`) |
 | **Send Messages** | ✅ Complete | Send to users, groups, channels |
 | **User Lookup** | ✅ Complete | `tg me`, `tg user @username/ID/phone` |
 | **Generic API** | ✅ Complete | `tg api <method>` for any Telegram call |
 | **SQL Command** | ✅ Complete | `tg sql` read-only cache queries + schema |
 | **System Status** | ✅ Complete | `tg status` daemon + sync + rate limits |
 | **Output Formatting** | ✅ Complete | JSON, pretty, quiet modes |
+| **Configuration** | ✅ Complete | `config.json` loader + `tg config` get/set/path |
 | **Database Layer** | ✅ Complete | Cache schema, users/chats cache, rate limits |
 | **Caching** | ✅ Complete | Stale-while-revalidate pattern, `--fresh` bypass |
 | **Daemon Infrastructure** | ✅ Complete | PID file, start/stop/status commands, signal handlers |
@@ -29,27 +31,23 @@
 | **Real-time Sync** | ✅ Complete | mtcute event wiring, update processing, cursor management |
 | **Sync Workers** | ✅ Complete | ForwardCatchup, BackwardHistory, InitialLoad jobs |
 | **Job Executor** | ✅ Complete | Rate-limited job execution with flood wait handling |
-| **Unit Tests** | ✅ Complete | 1029 tests in `src/__tests__/` |
-| **E2E Tests** | ✅ Complete | 81 tests in `src/__e2e__/` |
+| **AI Skill Commands** | ✅ Complete | `tg skill manifest/validate/install` |
+| **Unit Tests** | ✅ Complete | 1084 tests in `src/__tests__/` |
+| **E2E Tests** | ✅ Complete | 89 tests in `src/__e2e__/` |
 | **CI Pipeline** | ✅ Complete | lint, typecheck, test, build-test |
 | **Build System** | ✅ Complete | Native binary compilation, cross-platform |
 
 ### 📊 Test Coverage
 
-- **1110 total tests** (1029 unit + 81 E2E)
-- **~90.88% line coverage**
-- **~88.80% function coverage**
+- **1173 total tests** (1084 unit + 89 E2E)
+- **~90.88% line coverage** (last coverage run 2026-02-02)
+- **~88.80% function coverage** (last coverage run 2026-02-02)
 
-### ✅ Verification (2026-02-02)
+### ⚠️ Verification (2026-02-02)
 
-- `bun run typecheck`
-- `bun run test`
-- `bun run test:e2e`
-- `bun run test:coverage`
-
-### ✅ Additional Verification (2026-02-02)
-
-- No additional commands run in this pass.
+- `bun run test` (pass)
+- `bun run typecheck` (pass)
+- `bun run test:e2e` (pass)
 
 ### 🗄️ Database Layer (New)
 
@@ -78,8 +76,8 @@
 | 3 | Sync & Caching | ✅ Complete (dual cursor, message sync) |
 | 4 | Extended Database Schema | ✅ Complete |
 | 5 | send, chats, me, user, status | ✅ Complete |
-| 6 | Message History Commands | ⏳ Ready (backend complete, CLI pending) |
-| 7 | AI Integration | ❌ Not started |
+| 6 | Message History Commands (list/get) | ⏳ Search implemented; history pending |
+| 7 | AI Integration | ⏳ In progress (skill commands implemented) |
 
 ### 🔄 Sync System (Just Completed)
 
@@ -103,9 +101,12 @@ telegram-cli/
 │   │   ├── auth.ts           # login, login-qr, logout, status
 │   │   ├── accounts.ts       # list, switch, remove, info
 │   │   ├── contacts.ts       # list, search, get (with caching)
+│   │   ├── config.ts         # config get/set/path
 │   │   ├── daemon.ts         # daemon start/stop/status
 │   │   ├── chats.ts          # list/search/get barrel
 │   │   ├── chats/            # chats helpers
+│   │   ├── messages.ts       # messages barrel
+│   │   ├── messages/         # messages helpers
 │   │   ├── send.ts           # send barrel
 │   │   ├── send/             # peer resolution helpers
 │   │   ├── status.ts         # status barrel
@@ -115,6 +116,8 @@ telegram-cli/
 │   │   ├── user.ts           # user barrel
 │   │   ├── user/             # me/lookup helpers
 │   │   └── api.ts            # generic API command
+│   ├── config/
+│   │   └── index.ts          # config loader + helpers
 │   ├── services/
 │   │   └── telegram.ts       # client manager
 │   ├── db/
@@ -124,6 +127,7 @@ telegram-cli/
 │   │   ├── users-cache.ts    # UsersCache service
 │   │   ├── chats-cache.ts    # ChatsCache service
 │   │   ├── messages-cache.ts # MessagesCache service
+│   │   ├── messages-search.ts # Messages FTS5 search service
 │   │   ├── chat-sync-state.ts # Chat sync state management
 │   │   ├── sync-jobs.ts      # Sync job queue
 │   │   ├── rate-limits.ts    # Rate limiting service
@@ -159,8 +163,8 @@ telegram-cli/
 │   │   ├── job-executor.ts   # Job executor (wraps sync worker)
 │   │   ├── pid-file.ts       # PID file management
 │   │   └── types.ts          # Daemon types
-│   ├── __tests__/            # Unit tests (1029 tests)
-│   └── __e2e__/              # E2E tests (81 tests)
+│   ├── __tests__/            # Unit tests (1084 tests)
+│   └── __e2e__/              # E2E tests (89 tests)
 │       └── helpers/          # CLI runner, test environment
 ├── scripts/
 │   ├── build-all.ts          # Cross-platform builds
@@ -219,6 +223,11 @@ tg user +1234567890
 # Search contacts/chats in cache
 tg contacts search "john"
 tg chats search "group"
+
+# Search cached messages (FTS5)
+tg messages search --query "hello"
+tg messages search --query "hello" --chat @teamchat --sender @alice
+tg messages search --query "hello" --includeDeleted
 
 # Generic API call
 tg api users.getFullUser --id 123456789

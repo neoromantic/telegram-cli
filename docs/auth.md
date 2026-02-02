@@ -17,24 +17,26 @@ Set the API credentials in your environment (Bun auto-loads `.env`):
 
 ```bash
 tg auth login --phone +79261408252
+tg auth login --phone +79261408252 --label "Work"
 ```
 
 Flow:
 1. Create or reuse an account record in `data.db`.
 2. Start mtcute auth flow (phone → code → optional 2FA password).
 3. Persist session to `session_<id>.db`.
-4. Update account metadata (user ID, display name, active account).
+4. Update account metadata (user ID, display name, label, active account).
 
 ### QR Login
 
 ```bash
 tg auth login-qr
+tg auth login-qr --name "Personal"
 ```
 
 Flow:
 1. Generate a login QR code in the terminal.
 2. Scan with Telegram mobile app: **Settings → Devices → Link Desktop Device**.
-3. Persist session and update account metadata.
+3. Persist session and update account metadata (including label when provided).
 
 ### Logout
 
@@ -42,7 +44,8 @@ Flow:
 tg auth logout
 ```
 
-Logs out the active account (or a specific one via `--account`) and clears the local session.
+Logs out the active account (or a specific one via `--account` selector) and clears the local session.
+Selectors accept **ID**, **@username**, or **label**.
 
 ### Status
 
@@ -54,6 +57,8 @@ Checks whether the active account session is valid and returns:
 - account info
 - authentication status
 - a message if re-login is required
+
+Use `--account` to target a specific account by **ID**, **@username**, or **label**.
 
 ## Storage
 

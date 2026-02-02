@@ -12,6 +12,8 @@
   - `getDataDir()` uses `TELEGRAM_CLI_DATA_DIR ?? ~/.telegram-cli`
   - `data.db` stores accounts
   - `cache.db` stores cache + sync tables
+- `src/config/index.ts`
+  - `config.json` stores app-wide settings (active account, cache TTLs)
 
 ### Telegram Client
 
@@ -34,13 +36,13 @@
 ├── data.db
 ├── cache.db
 ├── session_<id>.db
-└── daemon.pid
+├── daemon.pid
+└── config.json
 ```
 
 ## Planned Improvements
 
 - Per-account directories (`accounts/<id>/...`)
-- Config file support (`config.json`)
 - Optional downloads directory per account
 - Richer account labels / selectors
 

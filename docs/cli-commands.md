@@ -1,4 +1,4 @@
-# CLI Commands (Current)
+# CLI Commands
 
 > **Status: Implemented**
 >
@@ -12,6 +12,7 @@
 | `accounts` | list, switch, remove, info |
 | `contacts` | list, search, get (cached; supports `--fresh`) |
 | `chats` | list, search (cache-only), get (@username only) |
+| `messages` | search (FTS5, cache-only) |
 | `send` | send messages (`--to`, `--message`) |
 | `api` | raw Telegram API calls |
 | `me` | current user |
@@ -30,7 +31,7 @@ Available on the root command:
 | `--verbose` | `-v` | Verbose logging | Off |
 | `--quiet` | `-q` | Minimal output | Off |
 
-> `--account` and `--fresh` are **per-command** options where supported.
+> `--account` and `--fresh` are **per-command** options where supported. `--account` accepts an ID, `@username`, or label.
 
 ## Core Commands
 
@@ -66,6 +67,14 @@ tg contacts get --id @username
 tg chats list --type private --limit 50
 tg chats search --query "team"   # cache-only
 tg chats get --id @username       # username only
+```
+
+### Messages
+
+```bash
+tg messages search --query "hello"
+tg messages search --query "hello" --chat @teamchat --sender @alice
+tg messages search --query "hello" --includeDeleted
 ```
 
 ### Send

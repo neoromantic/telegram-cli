@@ -2,11 +2,13 @@
 
 > **Status:** Partial
 >
-> Core multi-account commands exist, but per-account storage and richer identifiers are still planned.
+> Multi-account commands and account selectors are implemented. Per-account storage is still planned.
 
 ## Current Behavior
 
 - Multiple accounts can be stored and switched
+- Accounts can be labeled and identified by ID, @username, or label
+- Labels are persisted in `data.db` and surfaced in `tg accounts list/info`
 - Sessions are stored as `session_<id>.db`
 - Accounts are stored in `data.db`
 - Cache/sync data is stored in shared `cache.db`
@@ -14,7 +16,7 @@
 ## Constraints
 
 - **Soft limit**: 5 accounts (planned enforcement)
-- **Identification**: numeric account IDs only (current)
+- **Identification**: numeric IDs, `@username`, or labels
 
 ## Account Identification
 
@@ -26,13 +28,13 @@ tg accounts switch --id 1
 
 # Per-command override
 tg contacts list --account 2
+tg contacts list --account @username
+tg contacts list --account "Work"
 ```
 
-### Planned
-
-- `--account @username`
-- `--account "Work"` (custom label)
-- Phone/label selectors
+Notes:
+- `--account` selectors accept **ID**, **@username**, or **label**
+- Labels are stored on login (`--label` for phone, `--name` for QR)
 
 ## Storage Layout
 
@@ -76,6 +78,4 @@ New accounts are added via:
 ## Planned Enhancements
 
 - Per-account cache isolation (separate `cache.db` per account)
-- Human-friendly labels for accounts
-- `--account` selectors by username/label
 - Optional per-account downloads directory

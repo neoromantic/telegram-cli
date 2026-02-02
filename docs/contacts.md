@@ -1,6 +1,6 @@
 # Contact Management
 
-> **Status:** Core functionality implemented. Metadata extensions are planned.
+> **Status:** Implemented
 >
 > Implementation lives in `src/commands/contacts.ts` and cache access in `src/db/users-cache.ts`.
 
@@ -19,11 +19,3 @@
 ## Current Storage
 
 Contacts are stored in the **users cache** (`users_cache`). See `docs/database-schema.md` for the full schema.
-
-## Planned Extensions
-
-- Local tags and aliases
-- Notes field per contact
-- Custom grouping
-
-These will require new metadata tables (not yet implemented).

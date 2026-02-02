@@ -3,6 +3,7 @@
 > **Note**: For implemented testing features (unit tests, E2E tests), see [docs/testing.md](../testing.md).
 
 This document covers **planned** testing features not yet implemented.
+Snapshot testing is now implemented; see [docs/testing.md](../testing.md) for usage.
 
 ## Integration Tests (Planned)
 
@@ -61,9 +62,10 @@ describe.skipIf(!TEST_ACCOUNT)('Integration: Feature', () => {
 })
 ```
 
-## Snapshot Testing (Planned)
+## Snapshot Testing (Implemented)
 
-Capture and compare API response snapshots for regression testing.
+Snapshot tests now cover CLI/output formatting using Bun's snapshot assertions.
+See [docs/testing.md](../testing.md) for helpers and update workflow.
 
 ## Mock HTTP Layer (Planned)
 

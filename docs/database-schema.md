@@ -21,7 +21,7 @@ Default data directory: `~/.telegram-cli` (override with `TELEGRAM_CLI_DATA_DIR`
 ├── cache.db           # Cache + sync tables
 ├── session_<id>.db    # mtcute session per account
 ├── daemon.pid         # PID file when daemon is running
-└── config.json        # Optional user config (planned)
+└── config.json        # User config (cache TTLs, active account)
 ```
 
 ---
@@ -34,6 +34,8 @@ CREATE TABLE accounts (
   phone TEXT UNIQUE NOT NULL,
   user_id INTEGER,
   name TEXT,
+  username TEXT,
+  label TEXT,
   session_data TEXT NOT NULL DEFAULT '',
   is_active INTEGER DEFAULT 0,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -42,6 +44,8 @@ CREATE TABLE accounts (
 
 CREATE INDEX idx_accounts_phone ON accounts(phone);
 CREATE UNIQUE INDEX idx_accounts_user_id ON accounts(user_id);
+CREATE INDEX idx_accounts_username ON accounts(username);
+CREATE INDEX idx_accounts_label ON accounts(label);
 CREATE INDEX idx_accounts_active ON accounts(is_active);
 ```
 
@@ -150,6 +154,31 @@ CREATE INDEX idx_messages_cache_reply ON messages_cache(chat_id, reply_to_id) WH
 CREATE INDEX idx_messages_cache_type ON messages_cache(chat_id, message_type) WHERE has_media = 1;
 CREATE INDEX idx_messages_cache_pinned ON messages_cache(chat_id) WHERE is_pinned = 1;
 CREATE INDEX idx_messages_cache_fetched ON messages_cache(fetched_at);
+```
+
+### Table: message_search
+
+FTS5 index for message search.
+Maintained via triggers on `messages_cache` and rebuilt when schema versions change.
+
+```sql
+CREATE VIRTUAL TABLE message_search USING fts5(
+  text,
+  sender,
+  chat,
+  files,
+  tokenize='unicode61'
+);
+```
+
+### Table: search_meta
+
+```sql
+CREATE TABLE search_meta (
+  key TEXT PRIMARY KEY,
+  value TEXT,
+  updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000)
+);
 ```
 
 ### Table: chat_sync_state
@@ -266,6 +295,7 @@ There is no `schema_version` table yet. The schema is created with `CREATE TABLE
 - **Peers expire** — users/chats are considered stale based on TTL and can be refreshed on demand.
 - **raw_json is always stored** — all cached entities keep the original TL payload.
 - **Rate limits** — tracked per method + window with optional flood wait.
+- **Message search** — FTS5 index maintained via triggers on `messages_cache`.
 
 ## Capacity Planning (Approx.)
 
@@ -279,7 +309,6 @@ There is no `schema_version` table yet. The schema is created with `CREATE TABLE
 
 ## Future Enhancements
 
-- Full-text search (FTS5)
 - Media cache table with eviction policy
 - Drafts / reactions tables
 - Automated cleanup for `api_activity`

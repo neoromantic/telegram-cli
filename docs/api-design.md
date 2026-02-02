@@ -73,6 +73,11 @@ tg chats list --limit 50 --type private
 tg chats search --query "query"   # cache-only
 tg chats get --id @username        # username only
 
+# Messages (cache-only full-text search)
+tg messages search --query "hello"
+tg messages search --query "hello" --chat @teamchat --sender @alice
+tg messages search --query "hello" --includeDeleted
+
 # Messaging
 tg send --to @username --message "Hello"
 tg send --to @username -m "Hello" --silent
@@ -84,6 +89,24 @@ tg status
 # SQL
 tg sql --query "SELECT * FROM users_cache LIMIT 10"
 tg sql print-schema --table=users_cache
+
+# Skill integration
+tg skill manifest
+tg skill validate
+tg skill install
+```
+
+Example output (manifest):
+
+```json
+{
+  "success": true,
+  "data": {
+    "name": "telegram-cli",
+    "entrypoint": "tg",
+    "output": "json"
+  }
+}
 ```
 
 ### Cache Behavior
@@ -164,6 +187,8 @@ tg accounts switch --id 1
 
 # Or specify per-command
 tg contacts list --account 2
+tg contacts list --account @myuser
+tg contacts list --account "Work"
 tg api messages.getHistory --account 2 --peer @user
 ```
 

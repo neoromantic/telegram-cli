@@ -65,6 +65,30 @@ const deps: AuthDependencies = {
 - `sync-jobs.test.ts` — sync job lifecycle
 - `update-handlers.test.ts` — daemon update handlers
 
+### Snapshot Tests
+
+Snapshot tests lock down formatted output to catch regressions.
+
+- Helpers live in `src/__tests__/helpers/snapshots.ts`
+- Snapshots use Bun's `toMatchSnapshot` / `toMatchInlineSnapshot`
+- Update snapshots with `bun test -u`
+
+```typescript
+import { snapshotLines } from './helpers/snapshots'
+
+setOutputFormat('json')
+success({ message: 'Snapshot test', count: 2 })
+expect(snapshotLines(logs)).toMatchInlineSnapshot(`
+"{
+  "success": true,
+  "data": {
+    "message": "Snapshot test",
+    "count": 2
+  }
+}"
+`)
+```
+
 ## E2E Tests
 
 E2E tests execute the CLI binary via `Bun.spawn` to verify actual command behavior.
