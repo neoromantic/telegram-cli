@@ -42,9 +42,9 @@ Available on all commands:
 | Flag | Short | Description | Default |
 |------|-------|-------------|---------|
 | `--account ACCOUNT` | `-a` | Use specific account (name, phone, or index) | Active account |
-| `--format FORMAT` | `-f` | Output format: `json`, `table`, `minimal` | `json` |
+| `--format FORMAT` | `-f` | Output format: `json`, `pretty`, `quiet` | `json` |
 | `--verbose` | `-v` | Increase output verbosity | Off |
-| `--quiet` | `-q` | Suppress non-essential output | Off |
+| `--quiet` | `-q` | Minimal output (errors only) | Off |
 | `--fresh` | | Force fresh API fetch, skip cache | Off |
 | `--skip-cache` | | Alias for `--fresh` | Off |
 | `--help` | `-h` | Show help for command | |

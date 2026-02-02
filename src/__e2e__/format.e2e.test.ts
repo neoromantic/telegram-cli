@@ -87,6 +87,16 @@ describe('E2E: Output Formats', () => {
       expect(result.stdout).toBe('')
       expect(result.json).toBeUndefined()
     })
+
+    it('should output nothing with --quiet flag', async () => {
+      const result = await runCliSuccess(
+        ['accounts', 'list', '--quiet'],
+        env.getCliOptions(),
+      )
+
+      expect(result.stdout).toBe('')
+      expect(result.json).toBeUndefined()
+    })
   })
 
   describe('format flag position', () => {

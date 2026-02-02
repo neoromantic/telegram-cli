@@ -89,12 +89,13 @@ export const sqlQueryCommand = defineCommand({
     query: {
       type: 'string',
       alias: 'q',
-      description: 'SQL query to execute',
+      description: 'SQL query to execute (required unless using a subcommand)',
     },
     format: {
-      type: 'string',
+      type: 'enum',
       alias: 'f',
-      description: 'Output format: json, csv (default: json)',
+      description: 'Output format: json or csv',
+      options: ['json', 'csv'],
       default: 'json',
     },
     limit: {

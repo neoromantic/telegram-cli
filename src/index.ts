@@ -26,9 +26,10 @@ const main = defineCommand({
   },
   args: {
     format: {
-      type: 'string',
+      type: 'enum',
       alias: 'f',
       description: 'Output format: json, pretty, or quiet',
+      options: ['json', 'pretty', 'quiet'],
       default: 'json',
     },
     verbose: {
@@ -37,12 +38,23 @@ const main = defineCommand({
       description: 'Enable verbose output',
       default: false,
     },
+    quiet: {
+      type: 'boolean',
+      alias: 'q',
+      description: 'Minimal output (errors only)',
+      default: false,
+    },
   },
   setup({ args }) {
     // Set output format
     const format = args.format as OutputFormat
     if (format === 'json' || format === 'pretty' || format === 'quiet') {
       setOutputFormat(format)
+    }
+
+    if (args.quiet) {
+      setOutputFormat('quiet')
+      return
     }
 
     // Set verbose flag
