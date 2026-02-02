@@ -21,6 +21,9 @@ bun run test:install
 # Run unit tests
 bun run test
 
+# Run integration tests (real API, optional)
+bun run test:integration
+
 # Run E2E tests
 bun run test:e2e
 
@@ -473,25 +476,15 @@ env.cleanup()
 ```
 
 ### Integration Tests (Online)
-- Use test account: @usualguy
-- Credentials in `.env`
-- Snapshot responses for offline replay
-
-```typescript
-// Example unit test
-import { describe, it, expect, mock } from 'bun:test'
-
-describe('contacts list', () => {
-  it('returns cached contacts', async () => {
-    // Mock database
-    const mockDb = mock(() => [{ user_id: 1, first_name: 'Test' }])
-
-    const result = await listContacts({ limit: 10 })
-
-    expect(result.items).toHaveLength(1)
-  })
-})
-```
+- Location: `src/__integration__/*.integration.test.ts`
+- Run: `bun run test:integration`
+- Required env: `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`,
+  `TELEGRAM_TEST_ACCOUNT`, `TELEGRAM_TEST_SESSION_PATH` (or
+  `TELEGRAM_TEST_SESSION`)
+- Optional env: `TELEGRAM_TEST_RECIPIENT`
+- Record/replay fixtures: set `TELEGRAM_API_RECORD=1` or
+  `TELEGRAM_API_REPLAY=1` (override path with
+  `TELEGRAM_API_FIXTURES_DIR`)
 
 ---
 
@@ -580,11 +573,10 @@ Global Options:
 ### Planning Docs
 - [AI Integration](docs/plans/ai-integration.md)
 - [Multi-Account](docs/plans/multi-account.md)
-- [Testing](docs/plans/testing.md)
 - [Core Infrastructure](docs/plans/core-infrastructure.md)
 - [Groups](docs/plans/groups.md)
 - [Channel Tags](docs/plans/channel-tags.md)
 
 ---
 
-*Last updated: 2026-02-02 01:14:43 (post-compaction)*
+*Last updated: 2026-02-03 02:48:12 (post-compaction)*

@@ -43,7 +43,7 @@ tg sql --query="SELECT * FROM users_cache LIMIT 10"
 tg sql -q "SELECT user_id, username FROM users_cache WHERE is_contact = 1"
 
 # CSV output
-tg sql --query="SELECT user_id, username FROM users_cache" --format=csv
+tg sql --query="SELECT user_id, username FROM users_cache" --output=csv
 
 # Custom row limit
 tg sql --query="SELECT * FROM messages_cache" --limit=5000
@@ -77,7 +77,7 @@ tg sql print-schema --table=users_cache --output=sql
 | Flag | Alias | Description | Default |
 |------|-------|-------------|---------|
 | `--query` | `-q` | SQL query to execute | - |
-| `--format` | `-f` | Output format: `json`, `csv` | `json` |
+| `--output` | `-o` | Output format: `json`, `csv` | `json` |
 | `--limit` | `-l` | Max rows to return (0 = unlimited) | `1000` |
 
 ### `tg sql print-schema`
@@ -114,7 +114,7 @@ tg sql --query="SELECT user_id, username FROM users_cache LIMIT 2"
 ### CSV
 
 ```bash
-tg sql --query="SELECT user_id, username FROM users_cache" --format=csv
+tg sql --query="SELECT user_id, username FROM users_cache" --output=csv
 ```
 
 ```csv
@@ -246,7 +246,7 @@ tg sql --query="SELECT method, datetime(flood_wait_until/1000, 'unixepoch') as w
 
 ### Export contacts to CSV
 ```bash
-tg sql --query="SELECT first_name, last_name, username, phone FROM users_cache WHERE is_contact = 1" --format=csv > contacts.csv
+tg sql --query="SELECT first_name, last_name, username, phone FROM users_cache WHERE is_contact = 1" --output=csv > contacts.csv
 ```
 
 ---

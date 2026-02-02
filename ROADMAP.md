@@ -14,7 +14,6 @@ The canonical plans index lives in `docs/plans/README.md`.
 |----------|-------------|--------|
 | [multi-account.md](docs/plans/multi-account.md) | Per-account storage, labels | Partial |
 | [ai-integration.md](docs/plans/ai-integration.md) | Skills, Claude Code, self-install | Partial |
-| [testing.md](docs/plans/testing.md) | Integration tests, mock HTTP layer | Partial |
 | [core-infrastructure.md](docs/plans/core-infrastructure.md) | Store/config patterns | Partial |
 | [groups.md](docs/plans/groups.md) | Group operations | Planning |
 | [channel-tags.md](docs/plans/channel-tags.md) | Channel tagging system | Planning |

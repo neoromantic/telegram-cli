@@ -2,7 +2,7 @@
 
 ## Current Status: Phase 7 In Progress - AI Skill Integration
 
-**Last updated**: 2026-02-02 (messages search + FTS5 index)
+**Last updated**: 2026-02-02 (integration tests + API record/replay)
 
 ## What's Working
 
@@ -32,14 +32,16 @@
 | **Sync Workers** | ✅ Complete | ForwardCatchup, BackwardHistory, InitialLoad jobs |
 | **Job Executor** | ✅ Complete | Rate-limited job execution with flood wait handling |
 | **AI Skill Commands** | ✅ Complete | `tg skill manifest/validate/install` |
-| **Unit Tests** | ✅ Complete | 1084 tests in `src/__tests__/` |
+| **Unit Tests** | ✅ Complete | 1113 tests in `src/__tests__/` |
 | **E2E Tests** | ✅ Complete | 89 tests in `src/__e2e__/` |
+| **Integration Tests** | ✅ Complete | 5 tests in `src/__integration__/` (real API, optional) |
 | **CI Pipeline** | ✅ Complete | lint, typecheck, test, build-test |
 | **Build System** | ✅ Complete | Native binary compilation, cross-platform |
 
 ### 📊 Test Coverage
 
-- **1173 total tests** (1084 unit + 89 E2E)
+- **1202 total tests** (1113 unit + 89 E2E)
+- **5 integration tests** (optional, real API)
 - **~90.88% line coverage** (last coverage run 2026-02-02)
 - **~88.80% function coverage** (last coverage run 2026-02-02)
 
@@ -48,6 +50,7 @@
 - `bun run test` (pass)
 - `bun run typecheck` (pass)
 - `bun run test:e2e` (pass)
+- `bun run test:integration` (skipped: missing TELEGRAM_TEST_ACCOUNT)
 
 ### 🗄️ Database Layer (New)
 
@@ -163,9 +166,10 @@ telegram-cli/
 │   │   ├── job-executor.ts   # Job executor (wraps sync worker)
 │   │   ├── pid-file.ts       # PID file management
 │   │   └── types.ts          # Daemon types
-│   ├── __tests__/            # Unit tests (1084 tests)
-│   └── __e2e__/              # E2E tests (89 tests)
-│       └── helpers/          # CLI runner, test environment
+│   ├── __tests__/            # Unit tests (1113 tests)
+│   ├── __e2e__/              # E2E tests (89 tests)
+│   │   └── helpers/          # CLI runner, test environment
+│   └── __integration__/      # Integration tests (real API, optional)
 ├── scripts/
 │   ├── build-all.ts          # Cross-platform builds
 │   ├── postinstall.ts        # Post-install compilation
@@ -236,3 +240,11 @@ tg api users.getFullUser --id 123456789
 ---
 
 *See [ROADMAP.md](ROADMAP.md) for full feature roadmap.*
+
+---
+
+### Compaction Checkpoint - 2026-02-03 02:48:12
+- Trigger: manual
+- Messages processed: 1302
+- Review tasks above and continue from last incomplete item
+

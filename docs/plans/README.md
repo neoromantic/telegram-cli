@@ -14,7 +14,6 @@ For implemented features, see the `docs/` directory.
 |----------|-------------|--------|
 | [ai-integration.md](./ai-integration.md) | Claude Code skill + remaining AI tasks | Partial |
 | [multi-account.md](./multi-account.md) | Per-account storage + account limits | Partial |
-| [testing.md](./testing.md) | Integration tests + snapshots roadmap | Partial |
 | [core-infrastructure.md](./core-infrastructure.md) | Store/config patterns | Partial |
 | [groups.md](./groups.md) | Group operations | Planning |
 | [channel-tags.md](./channel-tags.md) | Channel tagging system | Planning |
