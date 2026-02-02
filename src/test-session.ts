@@ -5,6 +5,8 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { TelegramClient } from '@mtcute/bun'
+import type { tl } from '@mtcute/tl'
+import { toLong } from './utils/long'
 
 const API_ID = parseInt(process.env.TELEGRAM_API_ID ?? '0', 10)
 const API_HASH = process.env.TELEGRAM_API_HASH ?? ''
@@ -33,21 +35,18 @@ try {
   for await (const dialog of client.iterDialogs({ limit: 5 })) {
     // Dialog has a 'peer' accessor that returns the Peer
     const peer = dialog.peer
-    const title =
-      (peer as any).title ||
-      (peer as any).firstName ||
-      (peer as any).displayName ||
-      'Unknown'
+    const title = peer.displayName || 'Unknown'
     console.log(`- ${title}`)
     if (++count >= 5) break
   }
 
   // Test getting contacts via raw API
   console.log('\n=== Contacts (first 5) ===')
-  const contactsResult = await client.call({
+  const request: tl.contacts.RawGetContactsRequest = {
     _: 'contacts.getContacts',
-    hash: 0n, // Use 0n for Long type
-  } as any)
+    hash: toLong(0),
+  }
+  const contactsResult = await client.call(request)
 
   if (contactsResult._ === 'contacts.contacts') {
     const users = contactsResult.users.slice(0, 5)
@@ -61,8 +60,9 @@ try {
   } else {
     console.log('Contacts not modified (cached)')
   }
-} catch (error: any) {
-  console.error('Error:', error.message)
+} catch (error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  console.error('Error:', message)
 }
 
 process.exit(0)

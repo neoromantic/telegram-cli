@@ -1,7 +1,9 @@
+import type { tl } from '@mtcute/tl'
+
 import type { CachedUser, UserCacheInput } from '../db/users-cache'
 import type { Contact } from '../types'
 
-export function apiUserToCacheInput(user: any): UserCacheInput {
+export function apiUserToCacheInput(user: tl.RawUser): UserCacheInput {
   return {
     user_id: String(user.id),
     username: user.username ?? null,
@@ -17,7 +19,7 @@ export function apiUserToCacheInput(user: any): UserCacheInput {
   }
 }
 
-export function apiUserToContact(user: any): Contact {
+export function apiUserToContact(user: tl.RawUser): Contact {
   return {
     id: user.id,
     firstName: user.firstName ?? '',

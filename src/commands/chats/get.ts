@@ -1,14 +1,15 @@
+import type { tl } from '@mtcute/tl'
 import { defineCommand } from 'citty'
-
+import { ConfigError, getResolvedCacheConfig } from '../../config'
 import { getCacheDb } from '../../db'
 import { createChatsCache } from '../../db/chats-cache'
-import {
-  type ChatType,
-  getDefaultCacheConfig,
-  isCacheStale,
-} from '../../db/types'
+import { type ChatType, isCacheStale } from '../../db/types'
 import { getClientForAccount } from '../../services/telegram'
 import { ErrorCodes } from '../../types'
+import {
+  ACCOUNT_SELECTOR_DESCRIPTION,
+  resolveAccountSelector,
+} from '../../utils/account-selector'
 import {
   isUsernameIdentifier,
   normalizeUsername,
@@ -25,22 +26,32 @@ import {
   userToPrivateChatCacheInput,
 } from './helpers'
 
-function peerToChatType(peer: any): ChatType {
-  if (peer.megagroup || peer.gigagroup) return 'supergroup'
-  if (peer.broadcast) return 'channel'
-  return 'group'
+type ResolvedChat = Exclude<tl.TypeChat, tl.RawChatEmpty>
+
+function isChannelPeer(
+  peer: tl.TypeChat,
+): peer is tl.RawChannel | tl.RawChannelForbidden {
+  return peer._ === 'channel' || peer._ === 'channelForbidden'
 }
 
-function resolveAccountId(accountId: string | undefined): number | undefined {
-  if (!accountId) return undefined
-  return Number.parseInt(accountId, 10)
+function isResolvedChat(peer: tl.TypeChat | undefined): peer is ResolvedChat {
+  return Boolean(peer && peer._ !== 'chatEmpty')
+}
+
+function peerToChatType(peer: ResolvedChat): ChatType {
+  if (isChannelPeer(peer)) {
+    const isMega = 'megagroup' in peer && Boolean(peer.megagroup)
+    const isGiga = 'gigagroup' in peer && Boolean(peer.gigagroup)
+    return isMega || isGiga ? 'supergroup' : 'channel'
+  }
+  return 'group'
 }
 
 function getCachedChat(
   chatsCache: ReturnType<typeof createChatsCache>,
   identifier: string,
   isUsername: boolean,
-  cacheConfig: ReturnType<typeof getDefaultCacheConfig>,
+  cacheConfig: Awaited<ReturnType<typeof getResolvedCacheConfig>>,
 ) {
   const cached = isUsername
     ? chatsCache.getByUsername(identifier)
@@ -75,7 +86,9 @@ async function fetchChatFromApi(
 ) {
   const resolved = await resolveUsername(client, identifier)
   const resolvedChat = resolved.chats?.[0]
-  const resolvedUser = resolved.users?.[0]
+  const resolvedUser = resolved.users?.find(
+    (user): user is tl.RawUser => user._ === 'user',
+  )
 
   if (!resolvedChat && !resolvedUser) {
     error(
@@ -94,18 +107,27 @@ async function fetchChatFromApi(
     }
   }
 
+  if (!isResolvedChat(resolvedChat)) {
+    error(
+      ErrorCodes.TELEGRAM_ERROR,
+      `Chat @${normalizeUsername(identifier)} not found`,
+    )
+  }
+
   const peer = resolvedChat
   const type = peerToChatType(peer)
 
   const cacheInput = {
     chat_id: String(peer.id),
     type,
-    title: peer.title ?? null,
-    username: peer.username ?? null,
-    member_count: peer.participantsCount ?? null,
-    access_hash: peer.accessHash ? String(peer.accessHash) : null,
-    is_creator: peer.creator ? 1 : 0,
-    is_admin: peer.adminRights ? 1 : 0,
+    title: 'title' in peer ? (peer.title ?? null) : null,
+    username: 'username' in peer ? (peer.username ?? null) : null,
+    member_count:
+      'participantsCount' in peer ? (peer.participantsCount ?? null) : null,
+    access_hash:
+      isChannelPeer(peer) && peer.accessHash ? String(peer.accessHash) : null,
+    is_creator: 'creator' in peer && peer.creator ? 1 : 0,
+    is_admin: 'adminRights' in peer && peer.adminRights ? 1 : 0,
     last_message_id: null,
     last_message_at: null,
     fetched_at: Date.now(),
@@ -135,7 +157,7 @@ export const getChatCommand = defineCommand({
     },
     account: {
       type: 'string',
-      description: 'Account ID (uses active account if not specified)',
+      description: ACCOUNT_SELECTOR_DESCRIPTION,
     },
     fresh: {
       type: 'boolean',
@@ -145,14 +167,14 @@ export const getChatCommand = defineCommand({
   },
   async run({ args }) {
     const identifier = args.id
-    const accountId = resolveAccountId(args.account)
+    const accountId = resolveAccountSelector(args.account)
     const fresh = args.fresh ?? false
     const isUsername = isUsernameIdentifier(identifier)
 
     try {
       const cacheDb = getCacheDb()
       const chatsCache = createChatsCache(cacheDb)
-      const cacheConfig = getDefaultCacheConfig()
+      const cacheConfig = await getResolvedCacheConfig()
 
       if (!fresh) {
         const cached = getCachedChat(
@@ -177,6 +199,9 @@ export const getChatCommand = defineCommand({
       const result = await fetchChatFromApi(chatsCache, client, identifier)
       success(result)
     } catch (err) {
+      if (err instanceof ConfigError) {
+        error(ErrorCodes.INVALID_ARGS, err.message, { issues: err.issues })
+      }
       if (isRateLimitError(err)) {
         error(
           ErrorCodes.RATE_LIMITED,

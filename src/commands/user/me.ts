@@ -1,10 +1,13 @@
 import { defineCommand } from 'citty'
-
-import { getCacheDb } from '../../db'
-import { getDefaultCacheConfig, isCacheStale } from '../../db/types'
+import { ConfigError, getResolvedCacheConfig } from '../../config'
+import { accountsDb, getCacheDb } from '../../db'
+import { isCacheStale } from '../../db/types'
 import { createUsersCache } from '../../db/users-cache'
-import { getClientForAccount } from '../../services/telegram'
 import { ErrorCodes } from '../../types'
+import {
+  ACCOUNT_SELECTOR_DESCRIPTION,
+  resolveAccountSelector,
+} from '../../utils/account-selector'
 import { error, success, verbose } from '../../utils/output'
 import { apiUserToCacheInput } from '../../utils/telegram-mappers'
 import { apiUserToUserInfo, cachedUserToUserInfo } from './helpers'
@@ -17,7 +20,7 @@ export const meCommand = defineCommand({
   args: {
     account: {
       type: 'string',
-      description: 'Account ID (uses active account if not specified)',
+      description: ACCOUNT_SELECTOR_DESCRIPTION,
     },
     fresh: {
       type: 'boolean',
@@ -27,36 +30,64 @@ export const meCommand = defineCommand({
   },
   async run({ args }) {
     try {
-      const accountId = args.account
-        ? Number.parseInt(args.account, 10)
-        : undefined
+      const accountId = resolveAccountSelector(args.account)
       const fresh = args.fresh ?? false
 
-      const client = getClientForAccount(accountId)
+      // Get the account to find user_id (no network call needed)
+      const account =
+        accountId !== undefined
+          ? accountsDb.getById(accountId)
+          : accountsDb.getActive()
+
+      if (!account) {
+        error(
+          ErrorCodes.AUTH_REQUIRED,
+          'No account found. Please log in first with "tg auth login"',
+        )
+        return
+      }
 
       const cacheDb = getCacheDb()
       const usersCache = createUsersCache(cacheDb)
-      const cacheConfig = getDefaultCacheConfig()
+      const cacheConfig = await getResolvedCacheConfig()
 
-      let me: any
-      try {
-        me = await client.getMe()
-      } catch {
-        error(
-          ErrorCodes.AUTH_REQUIRED,
-          'Not authorized. Please log in first with "tg auth login"',
-        )
+      // Helper to fetch from API and update cache
+      const fetchAndUpdateCache = async () => {
+        // Lazy import to avoid loading mtcute for cache-only reads
+        const { getClientForAccount } = await import('../../services/telegram')
+        const client = getClientForAccount(accountId)
+
+        const me = await client.getMe()
+        const userRaw = me.raw
+
+        // Update cache
+        usersCache.upsert(apiUserToCacheInput(userRaw))
+
+        // Update account with user_id if missing
+        if (!account.user_id) {
+          accountsDb.update(account.id, { user_id: me.id })
+        }
+
+        return { me, userRaw }
       }
 
-      const userId = String(me.id)
-
-      if (!fresh) {
-        const cached = usersCache.getById(userId)
+      // Try cache first (no network call!)
+      if (!fresh && account.user_id) {
+        const cached = usersCache.getById(String(account.user_id))
         if (cached) {
           const stale = isCacheStale(
             cached.fetched_at,
             cacheConfig.staleness.peers,
           )
+
+          // If stale, trigger background refresh (don't await)
+          if (stale) {
+            verbose('Cache is stale, triggering background refresh...')
+            fetchAndUpdateCache().catch((err) => {
+              // Log error but don't fail - we already returned cached data
+              verbose(`Background refresh failed: ${err.message}`)
+            })
+          }
 
           verbose(`Returning cached user (stale: ${stale})`)
           success({
@@ -68,15 +99,29 @@ export const meCommand = defineCommand({
         }
       }
 
+      // Cache miss or --fresh: need to call the API synchronously
       verbose('Fetching current user info from API...')
-      usersCache.upsert(apiUserToCacheInput(me))
+
+      let result: Awaited<ReturnType<typeof fetchAndUpdateCache>>
+      try {
+        result = await fetchAndUpdateCache()
+      } catch {
+        error(
+          ErrorCodes.AUTH_REQUIRED,
+          'Not authorized. Please log in first with "tg auth login"',
+        )
+        return
+      }
 
       success({
-        user: apiUserToUserInfo(me),
+        user: apiUserToUserInfo(result.me.raw),
         source: 'api' as const,
         stale: false,
       })
     } catch (err) {
+      if (err instanceof ConfigError) {
+        error(ErrorCodes.INVALID_ARGS, err.message, { issues: err.issues })
+      }
       const message = err instanceof Error ? err.message : 'Unknown error'
       error(ErrorCodes.TELEGRAM_ERROR, `Failed to get user info: ${message}`)
     }

@@ -1,3 +1,4 @@
+import type { tl } from '@mtcute/tl'
 import { defineCommand } from 'citty'
 
 import { getCacheDb } from '../db'
@@ -5,6 +6,11 @@ import { createChatsCache } from '../db/chats-cache'
 import { createUsersCache } from '../db/users-cache'
 import { getClientForAccount } from '../services/telegram'
 import { ErrorCodes } from '../types'
+import {
+  ACCOUNT_SELECTOR_DESCRIPTION,
+  resolveAccountSelector,
+} from '../utils/account-selector'
+import { toLong } from '../utils/long'
 import { error, success, verbose } from '../utils/output'
 import {
   isRateLimitError,
@@ -12,11 +18,11 @@ import {
 } from '../utils/telegram-rate-limits'
 import { resolvePeer } from './send/peer-resolver'
 
-function createRandomId(): bigint {
-  return BigInt(Math.floor(Math.random() * Number.MAX_SAFE_INTEGER))
+function createRandomId(): tl.Long {
+  return toLong(BigInt(Math.floor(Math.random() * Number.MAX_SAFE_INTEGER)))
 }
 
-function extractMessageInfo(result: any): {
+function extractMessageInfo(result: tl.TypeUpdates): {
   messageId: number | null
   timestamp: number | null
 } {
@@ -24,19 +30,30 @@ function extractMessageInfo(result: any): {
     return { messageId: result.id, timestamp: result.date }
   }
 
-  if (!result.updates) {
+  if (!('updates' in result) || !result.updates) {
     return { messageId: null, timestamp: null }
   }
 
   for (const update of result.updates) {
+    if (update._ === 'updateMessageID') {
+      return {
+        messageId: update.id ?? null,
+        timestamp: null,
+      }
+    }
     if (
-      update._ === 'updateMessageID' ||
       update._ === 'updateNewMessage' ||
       update._ === 'updateNewChannelMessage'
     ) {
-      return {
-        messageId: update.id ?? update.message?.id ?? null,
-        timestamp: update.date ?? update.message?.date ?? null,
+      const message = update.message
+      if (
+        message &&
+        (message._ === 'message' || message._ === 'messageService')
+      ) {
+        return {
+          messageId: message.id,
+          timestamp: message.date,
+        }
       }
     }
   }
@@ -86,7 +103,7 @@ export const sendCommand = defineCommand({
     },
     account: {
       type: 'string',
-      description: 'Account ID (uses active account if not specified)',
+      description: ACCOUNT_SELECTOR_DESCRIPTION,
     },
     silent: {
       type: 'boolean',
@@ -101,9 +118,7 @@ export const sendCommand = defineCommand({
   async run({ args }) {
     const recipient = args.to
     const messageText = args.message
-    const accountId = args.account
-      ? Number.parseInt(args.account, 10)
-      : undefined
+    const accountId = resolveAccountSelector(args.account)
     const silent = args.silent ?? false
     const replyTo = args['reply-to']
       ? Number.parseInt(args['reply-to'], 10)
@@ -133,7 +148,7 @@ export const sendCommand = defineCommand({
 
       verbose(`Sending message to ${name}...`)
 
-      const request: any = {
+      const request: tl.messages.RawSendMessageRequest = {
         _: 'messages.sendMessage',
         peer: inputPeer,
         message: messageText,

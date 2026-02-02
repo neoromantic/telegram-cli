@@ -35,6 +35,8 @@ function initSchema(db: Database): void {
       phone TEXT UNIQUE NOT NULL,
       user_id INTEGER,
       name TEXT,
+      username TEXT,
+      label TEXT,
       session_data TEXT NOT NULL DEFAULT '',
       is_active INTEGER DEFAULT 0,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -51,10 +53,28 @@ function initSchema(db: Database): void {
     // Column already exists, ignore
   }
 
+  // Migration: add username column if it doesn't exist
+  try {
+    db.run('ALTER TABLE accounts ADD COLUMN username TEXT')
+  } catch {
+    // Column already exists, ignore
+  }
+
+  // Migration: add label column if it doesn't exist
+  try {
+    db.run('ALTER TABLE accounts ADD COLUMN label TEXT')
+  } catch {
+    // Column already exists, ignore
+  }
+
   db.run('CREATE INDEX IF NOT EXISTS idx_accounts_phone ON accounts(phone)')
   db.run(
     'CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_user_id ON accounts(user_id)',
   )
+  db.run(
+    'CREATE INDEX IF NOT EXISTS idx_accounts_username ON accounts(username)',
+  )
+  db.run('CREATE INDEX IF NOT EXISTS idx_accounts_label ON accounts(label)')
   db.run(
     'CREATE INDEX IF NOT EXISTS idx_accounts_active ON accounts(is_active)',
   )
@@ -107,10 +127,26 @@ class AccountRow {
   phone!: string
   user_id!: number | null
   name!: string | null
+  username!: string | null
+  label!: string | null
   session_data!: string
   is_active!: number
   created_at!: string
   updated_at!: string
+}
+
+function normalizeUsernameValue(username?: string | null): string | null {
+  if (username === undefined || username === null) return null
+  const trimmed = username.trim()
+  if (!trimmed) return null
+  const cleaned = trimmed.startsWith('@') ? trimmed.slice(1) : trimmed
+  return cleaned.toLowerCase()
+}
+
+function normalizeLabelValue(label?: string | null): string | null {
+  if (label === undefined || label === null) return null
+  const trimmed = label.trim()
+  return trimmed.length > 0 ? trimmed : null
 }
 
 /**
@@ -130,14 +166,20 @@ function createStatements(db: Database) {
     getAccountByUserId: db
       .query('SELECT * FROM accounts WHERE user_id = $user_id')
       .as(AccountRow),
+    getAccountByUsername: db
+      .query('SELECT * FROM accounts WHERE username = $username')
+      .as(AccountRow),
+    getAccountsByLabel: db
+      .query('SELECT * FROM accounts WHERE label = $label ORDER BY id')
+      .as(AccountRow),
     getActiveAccount: db
       .query('SELECT * FROM accounts WHERE is_active = 1 LIMIT 1')
       .as(AccountRow),
 
     insertAccount: db
       .query(`
-      INSERT INTO accounts (phone, user_id, name, session_data, is_active)
-      VALUES ($phone, $user_id, $name, $session_data, $is_active)
+      INSERT INTO accounts (phone, user_id, name, username, label, session_data, is_active)
+      VALUES ($phone, $user_id, $name, $username, $label, $session_data, $is_active)
       RETURNING *
     `)
       .as(AccountRow),
@@ -145,7 +187,7 @@ function createStatements(db: Database) {
     updateAccount: db
       .query(`
       UPDATE accounts
-      SET phone = $phone, user_id = $user_id, name = $name, session_data = $session_data, updated_at = CURRENT_TIMESTAMP
+      SET phone = $phone, user_id = $user_id, name = $name, username = $username, label = $label, session_data = $session_data, updated_at = CURRENT_TIMESTAMP
       WHERE id = $id
       RETURNING *
     `)
@@ -175,11 +217,15 @@ export interface AccountsDbInterface {
   getById(id: number): Account | null
   getByPhone(phone: string): Account | null
   getByUserId(userId: number): Account | null
+  getByUsername(username: string): Account | null
+  getAllByLabel(label: string): Account[]
   getActive(): Account | null
   create(data: {
     phone: string
     user_id?: number
     name?: string
+    username?: string
+    label?: string
     session_data?: string
     is_active?: boolean
   }): Account
@@ -189,6 +235,8 @@ export interface AccountsDbInterface {
       phone?: string
       user_id?: number | null
       name?: string
+      username?: string | null
+      label?: string | null
       session_data?: string
     },
   ): Account | null
@@ -225,6 +273,22 @@ export function createAccountsDb(db: Database): AccountsDbInterface {
       return statements.getAccountByUserId.get({ $user_id: userId }) ?? null
     },
 
+    /** Get account by Telegram username */
+    getByUsername(username: string): Account | null {
+      const normalized = normalizeUsernameValue(username)
+      if (!normalized) return null
+      return (
+        statements.getAccountByUsername.get({ $username: normalized }) ?? null
+      )
+    },
+
+    /** Get accounts by custom label */
+    getAllByLabel(label: string): Account[] {
+      const normalized = normalizeLabelValue(label)
+      if (!normalized) return []
+      return statements.getAccountsByLabel.all({ $label: normalized })
+    },
+
     /** Get the currently active account */
     getActive(): Account | null {
       return statements.getActiveAccount.get() ?? null
@@ -235,6 +299,8 @@ export function createAccountsDb(db: Database): AccountsDbInterface {
       phone: string
       user_id?: number
       name?: string
+      username?: string
+      label?: string
       session_data?: string
       is_active?: boolean
     }): Account {
@@ -242,6 +308,8 @@ export function createAccountsDb(db: Database): AccountsDbInterface {
         $phone: data.phone,
         $user_id: data.user_id ?? null,
         $name: data.name ?? null,
+        $username: normalizeUsernameValue(data.username),
+        $label: normalizeLabelValue(data.label),
         $session_data: data.session_data ?? '',
         $is_active: data.is_active ? 1 : 0,
       })
@@ -256,11 +324,22 @@ export function createAccountsDb(db: Database): AccountsDbInterface {
         phone?: string
         user_id?: number | null
         name?: string
+        username?: string | null
+        label?: string | null
         session_data?: string
       },
     ): Account | null {
       const current = this.getById(id)
       if (!current) return null
+
+      const nextUsername =
+        data.username !== undefined
+          ? normalizeUsernameValue(data.username)
+          : current.username
+      const nextLabel =
+        data.label !== undefined
+          ? normalizeLabelValue(data.label)
+          : current.label
 
       return (
         statements.updateAccount.get({
@@ -268,6 +347,8 @@ export function createAccountsDb(db: Database): AccountsDbInterface {
           $phone: data.phone ?? current.phone,
           $user_id: data.user_id !== undefined ? data.user_id : current.user_id,
           $name: data.name ?? current.name,
+          $username: nextUsername,
+          $label: nextLabel,
           $session_data: data.session_data ?? current.session_data,
         }) ?? null
       )

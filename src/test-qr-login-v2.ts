@@ -92,24 +92,34 @@ try {
   console.log(`Username: @${user.username || 'N/A'}`)
   console.log(`User ID: ${user.id}`)
   console.log(`\nSession saved to: ${SESSION_PATH}`)
-} catch (error: any) {
+} catch (error: unknown) {
   console.error('\n=== ERROR ===')
-  console.error('Type:', error.constructor.name)
-  console.error('Message:', error.message)
+  const name =
+    error && typeof error === 'object' && 'constructor' in error
+      ? ((error as { constructor?: { name?: string } }).constructor?.name ??
+        'UnknownError')
+      : 'UnknownError'
+  const message = error instanceof Error ? error.message : String(error)
+  const code =
+    error && typeof error === 'object' && 'code' in error
+      ? (error as { code?: unknown }).code
+      : undefined
+  console.error('Type:', name)
+  console.error('Message:', message)
 
-  if (error.code) {
-    console.error('Code:', error.code)
+  if (code !== undefined) {
+    console.error('Code:', code)
   }
 
   // Check for specific errors
-  if (error.message?.includes('SESSION_PASSWORD_NEEDED')) {
+  if (message.includes('SESSION_PASSWORD_NEEDED')) {
     console.log('\n> 2FA is enabled - the password prompt should have appeared')
-  } else if (error.message?.includes('key is not registered')) {
+  } else if (message.includes('key is not registered')) {
     console.log('\n> Auth key issue - this can happen if:')
     console.log('  - The QR code expired before password entry')
     console.log('  - Network connectivity issue')
     console.log('  - Try scanning the QR code again more quickly')
-  } else if (error.message?.includes('AUTH_TOKEN_EXPIRED')) {
+  } else if (message.includes('AUTH_TOKEN_EXPIRED')) {
     console.log('\n> QR code expired - please try again')
   }
 

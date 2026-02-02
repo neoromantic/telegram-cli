@@ -6,7 +6,7 @@ const timeoutPatchKey = Symbol.for('tgcli.timeoutPatch')
 if (!(globalThis as Record<symbol, boolean>)[timeoutPatchKey]) {
   const originalSetTimeout = globalThis.setTimeout
   globalThis.setTimeout = ((
-    handler: (...args: any[]) => void,
+    handler: (...args: unknown[]) => void,
     delay?: number,
     ...args: unknown[]
   ): ReturnType<typeof originalSetTimeout> => {

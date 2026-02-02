@@ -79,8 +79,9 @@ try {
   console.log('  tg auth status')
   console.log('  tg contacts list')
   console.log('  tg api <method>')
-} catch (error: any) {
-  console.error('Error:', error.message)
+} catch (error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  console.error('Error:', message)
   process.exit(1)
 }
 

@@ -112,9 +112,11 @@ async function callWithRateLimits<T>({
   }
 }
 
-function getMethodName(request: Record<string, unknown>): string {
-  const method = request._ as string | undefined
-  return method ?? 'unknown'
+type ClientCallRequest = Parameters<TelegramClient['call']>[0]
+type ClientCallOptions = Parameters<TelegramClient['call']>[1]
+
+function getMethodName(request: ClientCallRequest): string {
+  return request._ ?? 'unknown'
 }
 
 export function wrapClientCallWithRateLimits(
@@ -144,15 +146,15 @@ export function wrapClientCallWithRateLimits(
   clientAny.__rateLimitOriginalCall = originalCall
 
   clientAny.call = (async (
-    request: Record<string, unknown>,
-    callOptions?: Record<string, unknown>,
+    request: ClientCallRequest,
+    callOptions?: ClientCallOptions,
   ) => {
     const method = getMethodName(request)
     return callWithRateLimits({
       method,
       rateLimits,
       context: clientAny.__rateLimitContext,
-      call: () => originalCall(request as any, callOptions as any),
+      call: () => originalCall(request, callOptions),
     })
   }) as TelegramClient['call']
 

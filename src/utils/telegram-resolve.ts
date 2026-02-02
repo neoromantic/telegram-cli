@@ -1,12 +1,18 @@
+import type { TelegramClient } from '@mtcute/bun'
+import type { tl } from '@mtcute/tl'
+
 import { normalizeUsername } from './identifiers'
 
+type TelegramClientLike = Pick<TelegramClient, 'call'>
+
 export async function resolveUsername(
-  client: any,
+  client: TelegramClientLike,
   identifier: string,
-): Promise<any> {
+): Promise<tl.contacts.TypeResolvedPeer> {
   const username = normalizeUsername(identifier)
-  return client.call({
+  const request: tl.contacts.RawResolveUsernameRequest = {
     _: 'contacts.resolveUsername',
     username,
-  } as any)
+  }
+  return client.call(request)
 }

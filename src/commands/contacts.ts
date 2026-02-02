@@ -2,14 +2,20 @@
  * Contact management commands with caching
  * Uses UsersCache for stale-while-revalidate pattern
  */
+import type { tl } from '@mtcute/tl'
 import { defineCommand } from 'citty'
-
+import { ConfigError, getResolvedCacheConfig } from '../config'
 import { getCacheDb } from '../db'
-import { getDefaultCacheConfig, isCacheStale } from '../db/types'
+import { isCacheStale } from '../db/types'
 import { createUsersCache } from '../db/users-cache'
 import { getClientForAccount } from '../services/telegram'
 import { type Contact, ErrorCodes, type PaginatedResult } from '../types'
+import {
+  ACCOUNT_SELECTOR_DESCRIPTION,
+  resolveAccountSelector,
+} from '../utils/account-selector'
 import { buildCachePaginatedResponse } from '../utils/cache-pagination'
+import { toLong } from '../utils/long'
 import { error, success, verbose } from '../utils/output'
 import {
   apiUserToCacheInput,
@@ -20,6 +26,16 @@ import {
   isRateLimitError,
   wrapClientCallWithRateLimits,
 } from '../utils/telegram-rate-limits'
+
+function isRawUser(user: tl.TypeUser): user is tl.RawUser {
+  return user._ === 'user'
+}
+
+type RawUserWithAbout = tl.RawUser & { about?: string }
+
+function hasAbout(user: tl.RawUser): user is RawUserWithAbout {
+  return 'about' in user
+}
 
 /**
  * List contacts
@@ -42,7 +58,7 @@ export const listContactsCommand = defineCommand({
     },
     account: {
       type: 'string',
-      description: 'Account ID (uses active account if not specified)',
+      description: ACCOUNT_SELECTOR_DESCRIPTION,
     },
     fresh: {
       type: 'boolean',
@@ -53,15 +69,13 @@ export const listContactsCommand = defineCommand({
   async run({ args }) {
     const limit = Number.parseInt(args.limit ?? '50', 10)
     const offset = Number.parseInt(args.offset ?? '0', 10)
-    const accountId = args.account
-      ? Number.parseInt(args.account, 10)
-      : undefined
+    const accountId = resolveAccountSelector(args.account)
     const fresh = args.fresh ?? false
 
     try {
       const cacheDb = getCacheDb()
       const usersCache = createUsersCache(cacheDb)
-      const cacheConfig = getDefaultCacheConfig()
+      const cacheConfig = await getResolvedCacheConfig()
 
       // Check cache first (unless --fresh)
       if (!fresh) {
@@ -92,10 +106,11 @@ export const listContactsCommand = defineCommand({
         { context: 'cli:contacts.list' },
       )
 
-      const result = await client.call({
+      const request: tl.contacts.RawGetContactsRequest = {
         _: 'contacts.getContacts',
-        hash: BigInt(0),
-      } as any)
+        hash: toLong(0),
+      }
+      const result = await client.call(request)
 
       if (result._ === 'contacts.contactsNotModified') {
         success({
@@ -112,9 +127,7 @@ export const listContactsCommand = defineCommand({
       }
 
       // Extract and cache users
-      const apiUsers = (result.users as any[]).filter(
-        (u: any) => u._ === 'user',
-      )
+      const apiUsers = result.users.filter(isRawUser)
 
       // Cache all users
       const cacheInputs = apiUsers.map(apiUserToCacheInput)
@@ -142,6 +155,9 @@ export const listContactsCommand = defineCommand({
 
       success(response)
     } catch (err) {
+      if (err instanceof ConfigError) {
+        error(ErrorCodes.INVALID_ARGS, err.message, { issues: err.issues })
+      }
       if (isRateLimitError(err)) {
         error(
           ErrorCodes.RATE_LIMITED,
@@ -176,7 +192,7 @@ export const searchContactsCommand = defineCommand({
     },
     account: {
       type: 'string',
-      description: 'Account ID (uses active account if not specified)',
+      description: ACCOUNT_SELECTOR_DESCRIPTION,
     },
     fresh: {
       type: 'boolean',
@@ -187,15 +203,13 @@ export const searchContactsCommand = defineCommand({
   async run({ args }) {
     const query = args.query
     const limit = Number.parseInt(args.limit ?? '20', 10)
-    const accountId = args.account
-      ? Number.parseInt(args.account, 10)
-      : undefined
+    const accountId = resolveAccountSelector(args.account)
     const fresh = args.fresh ?? false
 
     try {
       const cacheDb = getCacheDb()
       const usersCache = createUsersCache(cacheDb)
-      const cacheConfig = getDefaultCacheConfig()
+      const cacheConfig = await getResolvedCacheConfig()
 
       // Check cache first (unless --fresh)
       if (!fresh) {
@@ -226,16 +240,15 @@ export const searchContactsCommand = defineCommand({
         { context: 'cli:contacts.search' },
       )
 
-      const result = await client.call({
+      const request: tl.contacts.RawSearchRequest = {
         _: 'contacts.search',
         q: query,
         limit,
-      } as any)
+      }
+      const result = await client.call(request)
 
       // Extract and cache users
-      const apiUsers = (result.users as any[]).filter(
-        (u: any) => u._ === 'user',
-      )
+      const apiUsers = result.users.filter(isRawUser)
 
       // Cache results
       const cacheInputs = apiUsers.map(apiUserToCacheInput)
@@ -255,6 +268,9 @@ export const searchContactsCommand = defineCommand({
         stale: false,
       })
     } catch (err) {
+      if (err instanceof ConfigError) {
+        error(ErrorCodes.INVALID_ARGS, err.message, { issues: err.issues })
+      }
       if (isRateLimitError(err)) {
         error(
           ErrorCodes.RATE_LIMITED,
@@ -284,7 +300,7 @@ export const getContactCommand = defineCommand({
     },
     account: {
       type: 'string',
-      description: 'Account ID (uses active account if not specified)',
+      description: ACCOUNT_SELECTOR_DESCRIPTION,
     },
     fresh: {
       type: 'boolean',
@@ -294,15 +310,13 @@ export const getContactCommand = defineCommand({
   },
   async run({ args }) {
     const identifier = args.id
-    const accountId = args.account
-      ? Number.parseInt(args.account, 10)
-      : undefined
+    const accountId = resolveAccountSelector(args.account)
     const fresh = args.fresh ?? false
 
     try {
       const cacheDb = getCacheDb()
       const usersCache = createUsersCache(cacheDb)
-      const cacheConfig = getDefaultCacheConfig()
+      const cacheConfig = await getResolvedCacheConfig()
 
       // Determine if ID or username
       const isUsername =
@@ -343,14 +357,15 @@ export const getContactCommand = defineCommand({
         { context: 'cli:contacts.get' },
       )
 
-      let result: any[]
+      let result: tl.TypeUser[]
 
       if (isUsername) {
         // Resolve username first
-        const resolved = await client.call({
+        const request: tl.contacts.RawResolveUsernameRequest = {
           _: 'contacts.resolveUsername',
           username: identifier.replace('@', ''),
-        } as any)
+        }
+        const resolved = await client.call(request)
 
         if (!resolved.users || resolved.users.length === 0) {
           error(
@@ -359,17 +374,18 @@ export const getContactCommand = defineCommand({
           )
         }
 
-        result = resolved.users
+        result = resolved.users ?? []
       } else {
         // Get by user ID
         const userId = Number.parseInt(identifier, 10)
-        result = await client.call({
+        const request: tl.users.RawGetUsersRequest = {
           _: 'users.getUsers',
-          id: [{ _: 'inputUser', userId, accessHash: BigInt(0) }],
-        } as any)
+          id: [{ _: 'inputUser', userId, accessHash: toLong(0) }],
+        }
+        result = await client.call(request)
       }
 
-      const user = result.find((u: any) => u._ === 'user')
+      const user = result.find(isRawUser)
 
       if (!user) {
         error(ErrorCodes.TELEGRAM_ERROR, `User "${identifier}" not found`)
@@ -385,7 +401,8 @@ export const getContactCommand = defineCommand({
         lastName: user.lastName ?? null,
         username: user.username ?? null,
         phone: user.phone ?? null,
-        bio: user.about ?? null,
+        bio:
+          hasAbout(user) && typeof user.about === 'string' ? user.about : null,
         isBot: user.bot ?? false,
         isVerified: user.verified ?? false,
         isPremium: user.premium ?? false,
@@ -394,6 +411,9 @@ export const getContactCommand = defineCommand({
         stale: false,
       })
     } catch (err) {
+      if (err instanceof ConfigError) {
+        error(ErrorCodes.INVALID_ARGS, err.message, { issues: err.issues })
+      }
       if (isRateLimitError(err)) {
         error(
           ErrorCodes.RATE_LIMITED,

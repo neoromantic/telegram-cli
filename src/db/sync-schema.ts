@@ -8,6 +8,182 @@
  */
 import type { Database } from 'bun:sqlite'
 
+const SEARCH_INDEX_VERSION = 1
+const MESSAGE_SEARCH_COLUMNS = ['text', 'sender', 'chat', 'files'] as const
+
+function buildSenderSearchExpr(prefix: string): string {
+  return `
+    COALESCE(
+      (
+        SELECT trim(
+          COALESCE(username, '') || ' ' ||
+          COALESCE(first_name, '') || ' ' ||
+          COALESCE(last_name, '') || ' ' ||
+          COALESCE(display_name, '') || ' ' ||
+          COALESCE(user_id, '')
+        )
+        FROM users_cache
+        WHERE user_id = CAST(${prefix}.from_id AS TEXT)
+      ),
+      COALESCE(CAST(${prefix}.from_id AS TEXT), '')
+    )
+  `
+}
+
+function buildChatSearchExpr(prefix: string): string {
+  return `
+    COALESCE(
+      (
+        SELECT trim(
+          COALESCE(title, '') || ' ' ||
+          COALESCE(username, '') || ' ' ||
+          COALESCE(chat_id, '')
+        )
+        FROM chats_cache
+        WHERE chat_id = CAST(${prefix}.chat_id AS TEXT)
+      ),
+      COALESCE(CAST(${prefix}.chat_id AS TEXT), '')
+    )
+  `
+}
+
+function dropMessageSearchSchema(db: Database): void {
+  db.run('DROP TRIGGER IF EXISTS messages_cache_ai')
+  db.run('DROP TRIGGER IF EXISTS messages_cache_ad')
+  db.run('DROP TRIGGER IF EXISTS messages_cache_au')
+  db.run('DROP TABLE IF EXISTS message_search')
+}
+
+function createMessageSearchSchema(db: Database): void {
+  // Message search index (FTS5)
+  db.run(`
+    CREATE VIRTUAL TABLE IF NOT EXISTS message_search USING fts5(
+      text,
+      sender,
+      chat,
+      files,
+      tokenize='unicode61'
+    )
+  `)
+
+  // Search metadata table
+  db.run(`
+    CREATE TABLE IF NOT EXISTS search_meta (
+      key TEXT PRIMARY KEY,
+      value TEXT,
+      updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000)
+    )
+  `)
+
+  const senderExprNew = buildSenderSearchExpr('new')
+  const chatExprNew = buildChatSearchExpr('new')
+
+  // Search triggers (keep FTS index in sync)
+  db.run(`
+    CREATE TRIGGER IF NOT EXISTS messages_cache_ai
+    AFTER INSERT ON messages_cache
+    BEGIN
+      INSERT INTO message_search(rowid, text, sender, chat, files)
+      VALUES (
+        new.rowid,
+        COALESCE(new.text, ''),
+        ${senderExprNew},
+        ${chatExprNew},
+        COALESCE(new.media_path, '')
+      );
+    END;
+  `)
+
+  db.run(`
+    CREATE TRIGGER IF NOT EXISTS messages_cache_ad
+    AFTER DELETE ON messages_cache
+    BEGIN
+      DELETE FROM message_search WHERE rowid = old.rowid;
+    END;
+  `)
+
+  db.run(`
+    CREATE TRIGGER IF NOT EXISTS messages_cache_au
+    AFTER UPDATE ON messages_cache
+    BEGIN
+      DELETE FROM message_search WHERE rowid = old.rowid;
+      INSERT INTO message_search(rowid, text, sender, chat, files)
+      VALUES (
+        new.rowid,
+        COALESCE(new.text, ''),
+        ${senderExprNew},
+        ${chatExprNew},
+        COALESCE(new.media_path, '')
+      );
+    END;
+  `)
+}
+
+function rebuildMessageSearchIndex(db: Database): void {
+  const senderExpr = buildSenderSearchExpr('m')
+  const chatExpr = buildChatSearchExpr('m')
+
+  db.transaction(() => {
+    db.run('DELETE FROM message_search')
+
+    db.run(`
+      INSERT INTO message_search(rowid, text, sender, chat, files)
+      SELECT
+        m.rowid,
+        COALESCE(m.text, ''),
+        ${senderExpr},
+        ${chatExpr},
+        COALESCE(m.media_path, '')
+      FROM messages_cache m
+    `)
+
+    db.query(
+      `
+        INSERT INTO search_meta (key, value, updated_at)
+        VALUES ($key, $value, $updated_at)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+      `,
+    ).run({
+      $key: 'search_index_version',
+      $value: String(SEARCH_INDEX_VERSION),
+      $updated_at: Date.now(),
+    })
+  })()
+}
+
+function getMessageSearchColumns(db: Database): string[] {
+  try {
+    const rows = db.query('PRAGMA table_info(message_search)').all() as Array<{
+      name: string
+    }>
+    return rows.map((row) => row.name)
+  } catch {
+    return []
+  }
+}
+
+function ensureMessageSearchIndex(db: Database): void {
+  const result = db
+    .query(`SELECT value FROM search_meta WHERE key = 'search_index_version'`)
+    .get() as { value?: string } | null
+  const storedVersion = Number(result?.value ?? 0)
+
+  const columns = getMessageSearchColumns(db)
+  const hasAllColumns = MESSAGE_SEARCH_COLUMNS.every((col) =>
+    columns.includes(col),
+  )
+  const needsSchemaRebuild = columns.length === 0 || !hasAllColumns
+
+  if (needsSchemaRebuild) {
+    dropMessageSearchSchema(db)
+    createMessageSearchSchema(db)
+  }
+
+  if (needsSchemaRebuild || storedVersion !== SEARCH_INDEX_VERSION) {
+    rebuildMessageSearchIndex(db)
+  }
+}
+
 /**
  * Initialize the sync schema
  * Creates all tables and indexes for the sync system
@@ -64,6 +240,10 @@ export function initSyncSchema(db: Database): void {
     CREATE INDEX IF NOT EXISTS idx_messages_cache_fetched
     ON messages_cache(fetched_at)
   `)
+
+  createMessageSearchSchema(db)
+
+  ensureMessageSearchIndex(db)
 
   // Chat sync state table - tracks sync progress per chat
   db.run(`

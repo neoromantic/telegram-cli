@@ -31,6 +31,8 @@ export const listAccountsCommand = defineCommand({
         id: a.id,
         phone: a.phone,
         name: a.name,
+        username: a.username,
+        label: a.label,
         isActive: a.is_active === 1,
         createdAt: a.created_at,
       })),
@@ -73,6 +75,8 @@ export const switchAccountCommand = defineCommand({
         id: account.id,
         phone: account.phone,
         name: account.name,
+        username: account.username,
+        label: account.label,
       },
     })
   },
@@ -111,6 +115,8 @@ export const removeAccountCommand = defineCommand({
       removedAccount: {
         id: account.id,
         phone: account.phone,
+        username: account.username,
+        label: account.label,
       },
     })
   },
@@ -145,6 +151,8 @@ export const infoAccountCommand = defineCommand({
         id: account.id,
         phone: account.phone,
         name: account.name,
+        username: account.username,
+        label: account.label,
         isActive: account.is_active === 1,
         createdAt: account.created_at,
         updatedAt: account.updated_at,

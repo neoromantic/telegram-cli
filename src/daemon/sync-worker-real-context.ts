@@ -1,3 +1,4 @@
+import type { tl } from '@mtcute/tl'
 import {
   buildInputPeer,
   extractFloodWaitSeconds,
@@ -29,7 +30,7 @@ export function handleFloodWait(
 export function getInputPeer(
   ctx: RealSyncWorkerContext,
   chatId: number,
-): { _: string; [key: string]: unknown } | null {
+): tl.TypeInputPeer | null {
   return buildInputPeer(chatId, ctx.chatsCache)
 }
 

@@ -48,19 +48,25 @@ try {
       2,
     ),
   )
-} catch (error: any) {
+} catch (error: unknown) {
   console.error('\n=== ERROR ===')
-  console.error('Name:', error.name)
-  console.error('Message:', error.message)
-  console.error('Code:', error.code)
+  const name = error instanceof Error ? error.name : 'UnknownError'
+  const message = error instanceof Error ? error.message : String(error)
+  const code =
+    error && typeof error === 'object' && 'code' in error
+      ? (error as { code?: unknown }).code
+      : undefined
+  console.error('Name:', name)
+  console.error('Message:', message)
+  console.error('Code:', code)
 
-  if (error.message?.includes('PHONE_NUMBER_INVALID')) {
+  if (message.includes('PHONE_NUMBER_INVALID')) {
     console.log('\n> Phone number format issue')
   }
-  if (error.message?.includes('FLOOD_WAIT')) {
+  if (message.includes('FLOOD_WAIT')) {
     console.log('\n> Rate limited - wait before trying again')
   }
-  if (error.message?.includes('SESSION_PASSWORD_NEEDED')) {
+  if (message.includes('SESSION_PASSWORD_NEEDED')) {
     console.log('\n> 2FA is enabled - password required')
   }
 }

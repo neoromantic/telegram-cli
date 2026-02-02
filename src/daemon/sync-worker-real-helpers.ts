@@ -1,6 +1,8 @@
 import type { TelegramClient } from '@mtcute/bun'
+import type { tl } from '@mtcute/tl'
 import type { ChatsCache } from '../db/chats-cache'
 import type { MessageInput } from '../db/messages-cache'
+import { toLong } from '../utils/long'
 
 const MEDIA_TYPE_MAP: Record<string, string> = {
   messageMediaPhoto: 'photo',
@@ -21,9 +23,9 @@ const MEDIA_TYPE_MAP: Record<string, string> = {
 export function buildInputPeer(
   chatId: number,
   chatsCache: ChatsCache,
-): { _: string; [key: string]: unknown } | null {
+): tl.TypeInputPeer | null {
   const chat = chatsCache.getById(String(chatId))
-  let inputPeer: { _: string; [key: string]: unknown } | null = null
+  let inputPeer: tl.TypeInputPeer | null = null
 
   if (!chat) {
     if (chatId < 0) {
@@ -32,7 +34,7 @@ export function buildInputPeer(
     return {
       _: 'inputPeerUser',
       userId: chatId,
-      accessHash: 0n,
+      accessHash: toLong(0),
     }
   }
 
@@ -41,7 +43,7 @@ export function buildInputPeer(
       inputPeer = {
         _: 'inputPeerUser',
         userId: Number(chat.chat_id),
-        accessHash: BigInt(chat.access_hash || '0'),
+        accessHash: toLong(chat.access_hash),
       }
       break
     case 'group':
@@ -55,7 +57,7 @@ export function buildInputPeer(
       inputPeer = {
         _: 'inputPeerChannel',
         channelId: Number(chat.chat_id),
-        accessHash: BigInt(chat.access_hash || '0'),
+        accessHash: toLong(chat.access_hash),
       }
       break
     default:
@@ -171,7 +173,7 @@ export function extractFloodWaitSeconds(error: Error): number | null {
 
 export async function fetchMessagesRaw(
   client: TelegramClient,
-  inputPeer: { _: string; [key: string]: unknown },
+  inputPeer: tl.TypeInputPeer,
   options: {
     offsetId?: number
     addOffset?: number
@@ -180,7 +182,7 @@ export async function fetchMessagesRaw(
     maxId?: number
   },
 ): Promise<{ messages: unknown[]; count?: number }> {
-  const result = await client.call({
+  const request: tl.messages.RawGetHistoryRequest = {
     _: 'messages.getHistory',
     peer: inputPeer,
     offsetId: options.offsetId ?? 0,
@@ -189,12 +191,11 @@ export async function fetchMessagesRaw(
     limit: options.limit ?? 100,
     maxId: options.maxId ?? 0,
     minId: options.minId ?? 0,
-    hash: 0n,
-  } as any)
-
-  const res = result as Record<string, unknown>
-  const messages = (res.messages as unknown[]) || []
-  const count = res.count as number | undefined
+    hash: toLong(0),
+  }
+  const result = await client.call(request)
+  const messages = 'messages' in result ? result.messages : []
+  const count = 'count' in result ? result.count : undefined
 
   return { messages, count }
 }

@@ -1,10 +1,17 @@
+import type { TelegramClient } from '@mtcute/bun'
+import type { tl } from '@mtcute/tl'
 import { defineCommand } from 'citty'
-
+import { ConfigError, getResolvedCacheConfig } from '../../config'
 import { getCacheDb } from '../../db'
-import { getDefaultCacheConfig, isCacheStale } from '../../db/types'
+import { isCacheStale } from '../../db/types'
 import { createUsersCache } from '../../db/users-cache'
 import { getClientForAccount } from '../../services/telegram'
 import { ErrorCodes } from '../../types'
+import {
+  ACCOUNT_SELECTOR_DESCRIPTION,
+  resolveAccountSelector,
+} from '../../utils/account-selector'
+import { toLong } from '../../utils/long'
 import { error, success, verbose } from '../../utils/output'
 import { apiUserToCacheInput } from '../../utils/telegram-mappers'
 import {
@@ -18,41 +25,53 @@ import {
   parseUserIdentifier,
 } from './helpers'
 
+type TelegramClientLike = Pick<TelegramClient, 'call'>
+
+function isRawUser(user: tl.TypeUser): user is tl.RawUser {
+  return user._ === 'user'
+}
+
 async function resolveUserByUsername(
-  client: any,
+  client: TelegramClientLike,
   username: string,
-): Promise<any> {
-  const resolved = (await client.call({
+): Promise<tl.RawUser | undefined> {
+  const request: tl.contacts.RawResolveUsernameRequest = {
     _: 'contacts.resolveUsername',
     username,
-  } as any)) as any
-
-  return resolved.users?.[0]
+  }
+  const resolved = await client.call(request)
+  return resolved.users?.find(isRawUser)
 }
 
-async function resolveUserByPhone(client: any, phone: string): Promise<any> {
-  const resolved = (await client.call({
+async function resolveUserByPhone(
+  client: TelegramClientLike,
+  phone: string,
+): Promise<tl.RawUser | undefined> {
+  const request: tl.contacts.RawResolvePhoneRequest = {
     _: 'contacts.resolvePhone',
     phone,
-  } as any)) as any
-
-  return resolved.users?.[0]
+  }
+  const resolved = await client.call(request)
+  return resolved.users?.find(isRawUser)
 }
 
-async function resolveUserById(client: any, identifier: string): Promise<any> {
+async function resolveUserById(
+  client: TelegramClientLike,
+  identifier: string,
+): Promise<tl.RawUser | undefined> {
   const userId = Number.parseInt(identifier, 10)
-  const result = (await client.call({
+  const request: tl.users.RawGetUsersRequest = {
     _: 'users.getUsers',
-    id: [{ _: 'inputUser', userId, accessHash: BigInt(0) }],
-  } as any)) as any[]
-
-  return result.find((u: any) => u._ === 'user')
+    id: [{ _: 'inputUser', userId, accessHash: toLong(0) }],
+  }
+  const result = await client.call(request)
+  return result.find(isRawUser)
 }
 
 async function resolveUserFromApi(
-  client: any,
+  client: TelegramClientLike,
   parsed: ReturnType<typeof parseUserIdentifier>,
-): Promise<any> {
+): Promise<tl.RawUser | undefined> {
   if (parsed.kind === 'username') {
     verbose(`Resolving username: ${parsed.value}`)
     return resolveUserByUsername(client, parsed.value)
@@ -67,8 +86,8 @@ async function resolveUserFromApi(
   return resolveUserById(client, parsed.value)
 }
 
-function handleUserLookupError(err: any, _identifier: string): never {
-  const errMsg = err?.message ?? String(err)
+function handleUserLookupError(err: unknown, _identifier: string): never {
+  const errMsg = err instanceof Error ? err.message : String(err)
   if (errMsg.includes('USERNAME_NOT_OCCUPIED')) {
     error(ErrorCodes.TELEGRAM_ERROR, 'Username not found')
   }
@@ -91,7 +110,7 @@ export const userCommand = defineCommand({
     },
     account: {
       type: 'string',
-      description: 'Account ID (uses active account if not specified)',
+      description: ACCOUNT_SELECTOR_DESCRIPTION,
     },
     fresh: {
       type: 'boolean',
@@ -102,16 +121,14 @@ export const userCommand = defineCommand({
   async run({ args }) {
     try {
       const identifier = args.identifier as string
-      const accountId = args.account
-        ? Number.parseInt(args.account, 10)
-        : undefined
+      const accountId = resolveAccountSelector(args.account)
       const fresh = args.fresh ?? false
 
       const parsed = parseUserIdentifier(identifier)
 
       const cacheDb = getCacheDb()
       const usersCache = createUsersCache(cacheDb)
-      const cacheConfig = getDefaultCacheConfig()
+      const cacheConfig = await getResolvedCacheConfig()
 
       if (!fresh) {
         const cached = findCachedUser(usersCache, parsed)
@@ -150,7 +167,10 @@ export const userCommand = defineCommand({
         source: 'api' as const,
         stale: false,
       })
-    } catch (err: any) {
+    } catch (err: unknown) {
+      if (err instanceof ConfigError) {
+        error(ErrorCodes.INVALID_ARGS, err.message, { issues: err.issues })
+      }
       if (isRateLimitError(err)) {
         error(
           ErrorCodes.RATE_LIMITED,

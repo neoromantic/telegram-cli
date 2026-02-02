@@ -62,6 +62,8 @@ export function resetOutputFormat(): void {
 
 /**
  * Output success result
+ * Note: In production mode, this exits the process to close any active connections.
+ * In test mode, this just logs and returns.
  */
 export function success<T>(data: T): void {
   const result: Output<T> = { success: true, data }
@@ -76,6 +78,12 @@ export function success<T>(data: T): void {
     case 'quiet':
       // No output for quiet mode
       break
+  }
+
+  // In production mode, exit to close any active connections (e.g., mtcute TelegramClient)
+  // This prevents the process from hanging when the event loop is kept alive by open sockets
+  if (process.env.BUN_ENV !== 'test' && process.env.NODE_ENV !== 'test') {
+    process.exit(0)
   }
 }
 

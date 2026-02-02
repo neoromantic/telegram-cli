@@ -88,11 +88,12 @@ try {
   )
   console.log(`Username: @${user.username || 'N/A'}`)
   console.log(`User ID: ${user.id}`)
-} catch (error: any) {
+} catch (error: unknown) {
   console.error('\n=== ERROR ===')
-  console.error('Message:', error.message)
+  const message = error instanceof Error ? error.message : String(error)
+  console.error('Message:', message)
 
-  if (error.message?.includes('key is not registered')) {
+  if (message.includes('key is not registered')) {
     console.log('\n> Auth key issue - try again from fresh session')
   }
 }

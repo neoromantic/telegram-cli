@@ -1,9 +1,13 @@
 import { defineCommand } from 'citty'
-
+import { ConfigError, getResolvedCacheConfig } from '../../config'
 import { getCacheDb } from '../../db'
 import { createChatsCache } from '../../db/chats-cache'
-import { getDefaultCacheConfig, isCacheStale } from '../../db/types'
+import { isCacheStale } from '../../db/types'
 import { ErrorCodes } from '../../types'
+import {
+  ACCOUNT_SELECTOR_DESCRIPTION,
+  resolveAccountSelector,
+} from '../../utils/account-selector'
 import { error, success } from '../../utils/output'
 import { cachedChatToItem } from './helpers'
 
@@ -25,17 +29,18 @@ export const searchChatsCommand = defineCommand({
     },
     account: {
       type: 'string',
-      description: 'Account ID (uses active account if not specified)',
+      description: ACCOUNT_SELECTOR_DESCRIPTION,
     },
   },
   async run({ args }) {
     const query = args.query
     const limit = Number.parseInt(args.limit ?? '20', 10)
+    resolveAccountSelector(args.account)
 
     try {
       const cacheDb = getCacheDb()
       const chatsCache = createChatsCache(cacheDb)
-      const cacheConfig = getDefaultCacheConfig()
+      const cacheConfig = await getResolvedCacheConfig()
 
       const results = chatsCache.search(query, limit)
 
@@ -66,6 +71,9 @@ export const searchChatsCommand = defineCommand({
           'No results in cache. Run "tg chats list --fresh" to populate cache first.',
       })
     } catch (err) {
+      if (err instanceof ConfigError) {
+        error(ErrorCodes.INVALID_ARGS, err.message, { issues: err.issues })
+      }
       const message = err instanceof Error ? err.message : 'Unknown error'
       error(ErrorCodes.TELEGRAM_ERROR, `Search failed: ${message}`)
     }

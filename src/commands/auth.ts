@@ -3,6 +3,7 @@
  */
 
 import { stdin as input, stdout as output } from 'node:process'
+import type { Interface as ReadlineInterface } from 'node:readline'
 import * as readline from 'node:readline/promises'
 import type { TelegramClient } from '@mtcute/bun'
 import { defineCommand } from 'citty'
@@ -13,6 +14,10 @@ import {
 } from '../db'
 import { createClient, getClient, isAuthorized } from '../services/telegram'
 import { ErrorCodes } from '../types'
+import {
+  ACCOUNT_SELECTOR_DESCRIPTION,
+  resolveAccountSelector,
+} from '../utils/account-selector'
 import { error, info, success } from '../utils/output'
 
 /**
@@ -73,8 +78,11 @@ export async function promptPassword(message: string): Promise<string> {
 
   // Hijack output to hide typed characters
   let stdoutMuted = false
-  const originalWriteToOutput = (rl as any)._writeToOutput
-  ;(rl as any)._writeToOutput = (stringToWrite: string) => {
+  const rlWithWrite = rl as ReadlineInterface & {
+    _writeToOutput: (stringToWrite: string) => void
+  }
+  const originalWriteToOutput = rlWithWrite._writeToOutput
+  rlWithWrite._writeToOutput = (stringToWrite: string) => {
     if (!stdoutMuted) {
       originalWriteToOutput.call(rl, stringToWrite)
     }
@@ -123,18 +131,27 @@ export function getDefaultDependencies(): AuthDependencies {
 export async function loginWithPhone(
   phone: string,
   deps: AuthDependencies,
+  options: { label?: string } = {},
 ): Promise<{
   success: boolean
-  account?: { id: number; phone: string; name?: string; username?: string }
+  account?: {
+    id: number
+    phone: string
+    name?: string
+    username?: string
+    label?: string | null
+  }
   error?: string
 }> {
   const { accountsDb, createClient, prompt, promptPassword } = deps
+  const label = options.label?.trim()
+  const labelValue = label ? label : undefined
 
   // Check if account already exists
   let account = accountsDb.getByPhone(phone)
   if (!account) {
     // Create new account record
-    account = accountsDb.create({ phone, is_active: true })
+    account = accountsDb.create({ phone, is_active: true, label: labelValue })
   } else {
     // Set as active
     accountsDb.setActive(account.id)
@@ -164,6 +181,8 @@ export async function loginWithPhone(
       accountsDb.update(existingAccount.id, {
         phone,
         name: `${user.firstName}${user.lastName ? ` ${user.lastName}` : ''}`,
+        username: user.username ?? null,
+        label: labelValue,
       })
       accountsDb.setActive(existingAccount.id)
 
@@ -175,11 +194,13 @@ export async function loginWithPhone(
       accountsDb.update(account.id, {
         user_id: user.id,
         name: `${user.firstName}${user.lastName ? ` ${user.lastName}` : ''}`,
+        username: user.username ?? null,
+        label: labelValue,
       })
     }
 
     // Close client to allow process to exit
-    await (client as any).close()
+    await client.destroy()
 
     return {
       success: true,
@@ -188,11 +209,12 @@ export async function loginWithPhone(
         phone: phone,
         name: user.firstName,
         username: user.username ?? undefined,
+        label: labelValue ?? finalAccount.label ?? null,
       },
     }
   } catch (err) {
     // Close client even on error
-    await (client as any).close().catch(() => {})
+    await client.destroy().catch(() => {})
     const message = err instanceof Error ? err.message : 'Unknown error'
     return { success: false, error: message }
   }
@@ -206,16 +228,24 @@ export async function loginWithQr(
   deps: AuthDependencies,
 ): Promise<{
   success: boolean
-  account?: { id: number; name?: string; username?: string; userId?: number }
+  account?: {
+    id: number
+    name?: string
+    username?: string
+    userId?: number
+    label?: string | null
+  }
   error?: string
 }> {
   const { accountsDb, createClient, qrGenerator } = deps
 
   // Create a new account record for QR login
-  const name = accountName || `qr_account_${Date.now()}`
+  const label = accountName?.trim()
+  const name = label && label.length > 0 ? label : `qr_account_${Date.now()}`
   const account = accountsDb.create({
     phone: `qr:${name}`, // QR logins don't have phone until authenticated
     name,
+    label: label && label.length > 0 ? label : undefined,
     is_active: true,
   })
 
@@ -254,6 +284,8 @@ export async function loginWithQr(
       accountsDb.update(existingAccount.id, {
         user_id: user.id,
         name: `${user.firstName}${user.lastName ? ` ${user.lastName}` : ''}`,
+        username: user.username ?? null,
+        label: label && label.length > 0 ? label : undefined,
       })
       accountsDb.setActive(existingAccount.id)
 
@@ -266,11 +298,13 @@ export async function loginWithQr(
         phone: `user:${user.id}`, // QR logins don't expose phone number
         user_id: user.id,
         name: `${user.firstName}${user.lastName ? ` ${user.lastName}` : ''}`,
+        username: user.username ?? null,
+        label: label && label.length > 0 ? label : undefined,
       })
     }
 
     // Close client to allow process to exit
-    await (client as any).close()
+    await client.destroy()
 
     return {
       success: true,
@@ -279,11 +313,12 @@ export async function loginWithQr(
         name: user.firstName,
         username: user.username ?? undefined,
         userId: user.id,
+        label: label ?? finalAccount.label ?? null,
       },
     }
   } catch (err) {
     // Close client even on error
-    await (client as any).close().catch(() => {})
+    await client.destroy().catch(() => {})
     // Clean up account on failure
     accountsDb.delete(account.id)
     const message = err instanceof Error ? err.message : 'Unknown error'
@@ -320,7 +355,7 @@ export async function logout(
     await client.call({ _: 'auth.logOut' })
 
     // Close client to allow process to exit
-    await (client as any).close()
+    await client.destroy()
 
     // Remove account from database
     accountsDb.delete(account.id)
@@ -332,7 +367,7 @@ export async function logout(
     }
   } catch (err) {
     // Close client even on error
-    await (client as any).close().catch(() => {})
+    await client.destroy().catch(() => {})
     const message = err instanceof Error ? err.message : 'Unknown error'
     return { success: false, error: message }
   }
@@ -376,7 +411,7 @@ export async function getAuthStatus(
     if (authorized) {
       const me = await client.getMe()
       // Close client to allow process to exit
-      await (client as any).close()
+      await client.destroy()
       return {
         authenticated: true,
         account: {
@@ -390,7 +425,7 @@ export async function getAuthStatus(
     }
 
     // Close client to allow process to exit
-    await (client as any).close()
+    await client.destroy()
     return {
       authenticated: false,
       account: {
@@ -402,7 +437,7 @@ export async function getAuthStatus(
     }
   } catch {
     // Close client even on error
-    await (client as any).close().catch(() => {})
+    await client.destroy().catch(() => {})
     return {
       authenticated: false,
       account: {
@@ -428,12 +463,19 @@ export const loginCommand = defineCommand({
       description: 'Phone number in international format (e.g., +79261408252)',
       required: true,
     },
+    label: {
+      type: 'string',
+      description: 'Custom label for this account',
+    },
   },
   async run({ args }) {
     const phone = args.phone
+    const label = args.label
 
     info(`Logging in with phone: ${phone}`)
-    const result = await loginWithPhone(phone, getDefaultDependencies())
+    const result = await loginWithPhone(phone, getDefaultDependencies(), {
+      label,
+    })
 
     if (result.success && result.account) {
       success({
@@ -459,7 +501,7 @@ export const loginQrCommand = defineCommand({
   args: {
     name: {
       type: 'string',
-      description: 'Account name/label for this session',
+      description: 'Account label for this session',
     },
   },
   async run({ args }) {
@@ -491,12 +533,11 @@ export const logoutCommand = defineCommand({
   args: {
     account: {
       type: 'string',
-      description:
-        'Account ID to logout (uses active account if not specified)',
+      description: ACCOUNT_SELECTOR_DESCRIPTION,
     },
   },
   async run({ args }) {
-    const accountId = args.account ? parseInt(args.account, 10) : undefined
+    const accountId = resolveAccountSelector(args.account)
 
     const result = await logout(accountId, getDefaultDependencies())
 
@@ -527,11 +568,11 @@ export const statusCommand = defineCommand({
   args: {
     account: {
       type: 'string',
-      description: 'Account ID to check (uses active account if not specified)',
+      description: ACCOUNT_SELECTOR_DESCRIPTION,
     },
   },
   async run({ args }) {
-    const accountId = args.account ? parseInt(args.account, 10) : undefined
+    const accountId = resolveAccountSelector(args.account)
 
     const result = await getAuthStatus(accountId, getDefaultDependencies())
 

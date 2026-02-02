@@ -74,11 +74,12 @@ try {
   console.log('\nVerifying session...')
   const me = await client.getMe()
   console.log(`Session works! Logged in as: ${me.firstName}`)
-} catch (error: any) {
+} catch (error: unknown) {
   console.error('\n=== ERROR ===')
-  console.error(error.message)
+  const message = error instanceof Error ? error.message : String(error)
+  console.error(message)
 
-  if (error.message?.includes('key is not registered')) {
+  if (message.includes('key is not registered')) {
     console.log(
       '\nThis error means the auth key was lost between QR scan and 2FA.',
     )

@@ -1,11 +1,17 @@
+import type { Dialog, TelegramClient } from '@mtcute/bun'
+import type { tl } from '@mtcute/tl'
 import { defineCommand } from 'citty'
-
+import { ConfigError, getResolvedCacheConfig } from '../../config'
 import { getCacheDb } from '../../db'
 import { createChatsCache } from '../../db/chats-cache'
-import { type ChatType, getDefaultCacheConfig } from '../../db/types'
+import type { ChatType } from '../../db/types'
 import { createUsersCache } from '../../db/users-cache'
 import { getClientForAccount } from '../../services/telegram'
 import { ErrorCodes, type PaginatedResult } from '../../types'
+import {
+  ACCOUNT_SELECTOR_DESCRIPTION,
+  resolveAccountSelector,
+} from '../../utils/account-selector'
 import { buildCachePaginatedResponse } from '../../utils/cache-pagination'
 import { error, success, verbose } from '../../utils/output'
 import { apiUserToCacheInput } from '../../utils/telegram-mappers'
@@ -21,18 +27,18 @@ import {
   isValidChatType,
 } from './helpers'
 
+type DialogCollectorClient = Pick<TelegramClient, 'iterDialogs'>
+
 async function collectDialogs(
-  client: any,
-): Promise<{ dialogs: any[]; users: any[] }> {
-  const dialogs: any[] = []
-  const users: any[] = []
+  client: DialogCollectorClient,
+): Promise<{ dialogs: Dialog[]; users: tl.RawUser[] }> {
+  const dialogs: Dialog[] = []
+  const users: tl.RawUser[] = []
 
   for await (const dialog of client.iterDialogs({ limit: 200 })) {
     dialogs.push(dialog)
-
-    const raw = (dialog as any).raw || dialog
-    if (raw?.peer?._ === 'peerUser' && (dialog as any).chat) {
-      users.push((dialog as any).chat)
+    if (dialog.peer.type === 'user') {
+      users.push(dialog.peer.raw)
     }
   }
 
@@ -62,7 +68,7 @@ export const listChatsCommand = defineCommand({
     },
     account: {
       type: 'string',
-      description: 'Account ID (uses active account if not specified)',
+      description: ACCOUNT_SELECTOR_DESCRIPTION,
     },
     fresh: {
       type: 'boolean',
@@ -73,9 +79,7 @@ export const listChatsCommand = defineCommand({
   async run({ args }) {
     const limit = Number.parseInt(args.limit ?? '50', 10)
     const offset = Number.parseInt(args.offset ?? '0', 10)
-    const accountId = args.account
-      ? Number.parseInt(args.account, 10)
-      : undefined
+    const accountId = resolveAccountSelector(args.account)
     const fresh = args.fresh ?? false
     const rawType = args.type
     const typeFilter = rawType as ChatType | undefined
@@ -90,7 +94,7 @@ export const listChatsCommand = defineCommand({
     try {
       const cacheDb = getCacheDb()
       const chatsCache = createChatsCache(cacheDb)
-      const cacheConfig = getDefaultCacheConfig()
+      const cacheConfig = await getResolvedCacheConfig()
 
       if (!fresh) {
         const cachedChats = chatsCache.list({
@@ -158,6 +162,9 @@ export const listChatsCommand = defineCommand({
 
       success(response)
     } catch (err) {
+      if (err instanceof ConfigError) {
+        error(ErrorCodes.INVALID_ARGS, err.message, { issues: err.issues })
+      }
       if (isRateLimitError(err)) {
         error(
           ErrorCodes.RATE_LIMITED,

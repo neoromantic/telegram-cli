@@ -4,10 +4,15 @@
  * This enables full access to Telegram's API without manually
  * mapping every method to a CLI command.
  */
+import type { tl } from '@mtcute/tl'
 import { defineCommand } from 'citty'
 
 import { getClientForAccount } from '../services/telegram'
 import { ErrorCodes } from '../types'
+import {
+  ACCOUNT_SELECTOR_DESCRIPTION,
+  resolveAccountSelector,
+} from '../utils/account-selector'
 import { mergeArgs } from '../utils/args'
 import { error, success } from '../utils/output'
 import {
@@ -43,7 +48,7 @@ export const apiCommand = defineCommand({
     account: {
       type: 'string',
       alias: 'a',
-      description: 'Account ID (uses active account if not specified)',
+      description: ACCOUNT_SELECTOR_DESCRIPTION,
     },
     raw: {
       type: 'boolean',
@@ -54,7 +59,7 @@ export const apiCommand = defineCommand({
   },
   async run({ args }) {
     const method = args.method as string
-    const accountId = args.account ? parseInt(args.account, 10) : undefined
+    const accountId = resolveAccountSelector(args.account)
 
     // Validate method name format
     if (!method.includes('.')) {
@@ -85,7 +90,8 @@ export const apiCommand = defineCommand({
       const params = mergeArgs(apiArgs, args.json as string | undefined)
 
       // Make the API call
-      const result = await client.call({ _: method, ...params } as any)
+      const request = { _: method, ...params } as tl.RpcMethod
+      const result = await client.call(request)
 
       // Output result
       if (args.raw) {
@@ -110,8 +116,11 @@ export const apiCommand = defineCommand({
       const code = ErrorCodes.TELEGRAM_ERROR
       const details: Record<string, unknown> = { method }
 
-      if (err instanceof Error && 'code' in err) {
-        details.telegramErrorCode = (err as any).code
+      if (err && typeof err === 'object' && 'code' in err) {
+        const codeValue = (err as { code?: unknown }).code
+        if (typeof codeValue === 'string' || typeof codeValue === 'number') {
+          details.telegramErrorCode = codeValue
+        }
       }
 
       error(code, `API call failed: ${message}`, details)

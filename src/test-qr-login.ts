@@ -77,12 +77,14 @@ try {
   )
   console.log(`Username: @${user.username || 'N/A'}`)
   console.log(`User ID: ${user.id}`)
-} catch (error: any) {
+} catch (error: unknown) {
   console.error('\n=== ERROR ===')
-  console.error('Name:', error.name)
-  console.error('Message:', error.message)
+  const name = error instanceof Error ? error.name : 'UnknownError'
+  const message = error instanceof Error ? error.message : String(error)
+  console.error('Name:', name)
+  console.error('Message:', message)
 
-  if (error.message?.includes('SESSION_PASSWORD_NEEDED')) {
+  if (message.includes('SESSION_PASSWORD_NEEDED')) {
     console.log('\n> 2FA is enabled - password required')
   }
 }

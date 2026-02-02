@@ -1,3 +1,6 @@
+import type { Dialog } from '@mtcute/bun'
+import type { tl } from '@mtcute/tl'
+
 import type {
   CachedChat,
   CachedChatInput,
@@ -57,21 +60,23 @@ export function filterChatsByType(
   return chats.filter((chat) => chat.type === typeFilter)
 }
 
-export function getChatType(dialog: any, peer: any): ChatType {
-  if (peer._ === 'peerUser') return 'private'
-  if (peer._ === 'peerChat') return 'group'
-  if (peer._ === 'peerChannel') {
-    const chat = dialog.chat || dialog.entity
-    if (chat?.megagroup || chat?.gigagroup) return 'supergroup'
+export function getChatType(dialog: Dialog): ChatType {
+  const peer = dialog.peer
+  if (peer.type === 'user') return 'private'
+  if (peer.chatType === 'supergroup' || peer.chatType === 'gigagroup') {
+    return 'supergroup'
+  }
+  if (peer.chatType === 'channel' || peer.chatType === 'monoforum') {
     return 'channel'
   }
-  return 'private'
+  return 'group'
 }
 
-export function dialogToCacheInput(dialog: any): CachedChatInput {
-  const peer = dialog.peer || dialog.raw?.peer
-  const chat = dialog.chat || dialog.entity
-  const type = getChatType(dialog, peer)
+export function dialogToCacheInput(dialog: Dialog): CachedChatInput {
+  const rawPeer = dialog.raw.peer
+  const peer = dialog.peer
+  const type = getChatType(dialog)
+  const lastMessageAt = dialog.lastMessage?.date ?? null
 
   let chatId: string
   let title: string | null = null
@@ -79,22 +84,31 @@ export function dialogToCacheInput(dialog: any): CachedChatInput {
   let memberCount: number | null = null
   let accessHash: string | null = null
 
-  if (type === 'private') {
-    chatId = String(peer.userId)
-    title = chat?.firstName
-      ? [chat.firstName, chat.lastName].filter(Boolean).join(' ')
-      : null
-    username = chat?.username ?? null
-  } else if (type === 'group') {
-    chatId = String(peer.chatId)
-    title = chat?.title ?? null
-    memberCount = chat?.participantsCount ?? null
+  if (rawPeer._ === 'peerUser' && peer.type === 'user') {
+    chatId = String(rawPeer.userId)
+    title = peer.displayName || null
+    username = peer.username ?? null
+  } else if (rawPeer._ === 'peerChat' && peer.type === 'chat') {
+    chatId = String(rawPeer.chatId)
+    title = peer.title ?? null
+    memberCount = peer.membersCount ?? null
+  } else if (rawPeer._ === 'peerChannel' && peer.type === 'chat') {
+    chatId = String(rawPeer.channelId)
+    title = peer.title ?? null
+    username = peer.username ?? null
+    memberCount = peer.membersCount ?? null
+    const rawChat = peer.raw
+    if (rawChat._ === 'channel' || rawChat._ === 'channelForbidden') {
+      accessHash = rawChat.accessHash ? String(rawChat.accessHash) : null
+    }
   } else {
-    chatId = String(peer.channelId)
-    title = chat?.title ?? null
-    username = chat?.username ?? null
-    memberCount = chat?.participantsCount ?? null
-    accessHash = chat?.accessHash ? String(chat.accessHash) : null
+    chatId = String(
+      rawPeer._ === 'peerUser'
+        ? rawPeer.userId
+        : rawPeer._ === 'peerChat'
+          ? rawPeer.chatId
+          : rawPeer.channelId,
+    )
   }
 
   return {
@@ -104,16 +118,16 @@ export function dialogToCacheInput(dialog: any): CachedChatInput {
     username,
     member_count: memberCount,
     access_hash: accessHash,
-    is_creator: chat?.creator ? 1 : 0,
-    is_admin: chat?.adminRights ? 1 : 0,
-    last_message_id: dialog.topMessage ?? null,
-    last_message_at: dialog.date ? dialog.date * 1000 : null,
+    is_creator: peer.type === 'chat' && peer.isCreator ? 1 : 0,
+    is_admin: peer.type === 'chat' && peer.isAdmin ? 1 : 0,
+    last_message_id: dialog.raw.topMessage ?? null,
+    last_message_at: lastMessageAt ? lastMessageAt.getTime() : null,
     fetched_at: Date.now(),
-    raw_json: JSON.stringify(dialog.raw || dialog),
+    raw_json: JSON.stringify(dialog.raw),
   }
 }
 
-export function userToPrivateChatCacheInput(user: any): CachedChatInput {
+export function userToPrivateChatCacheInput(user: tl.RawUser): CachedChatInput {
   return {
     chat_id: String(user.id),
     type: 'private',

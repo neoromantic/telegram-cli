@@ -60,7 +60,7 @@ export interface SchemaRegistry {
 // =============================================================================
 
 export const SCHEMA_REGISTRY: SchemaRegistry = {
-  version: 1,
+  version: 2,
   tables: {
     // -------------------------------------------------------------------------
     // Users Cache Table
@@ -355,6 +355,56 @@ export const SCHEMA_REGISTRY: SchemaRegistry = {
         idx_messages_cache_type: 'Filter by media type',
         idx_messages_cache_pinned: 'Find pinned messages',
         idx_messages_cache_fetched: 'Track sync progress',
+      },
+    },
+
+    // -------------------------------------------------------------------------
+    // Message Search Index (FTS5)
+    // -------------------------------------------------------------------------
+    message_search: {
+      description:
+        'Full-text search index for messages_cache (FTS5 virtual table).',
+      primaryKey: 'rowid',
+      columns: {
+        text: {
+          description: 'Indexed message text content',
+          nullable: true,
+        },
+        sender: {
+          description: 'Indexed sender tokens (username, name, id)',
+          nullable: true,
+        },
+        chat: {
+          description: 'Indexed chat tokens (title, username, id)',
+          nullable: true,
+        },
+        files: {
+          description: 'Indexed media path/filename tokens',
+          nullable: true,
+        },
+      },
+      indexes: {},
+    },
+
+    // -------------------------------------------------------------------------
+    // Search Metadata
+    // -------------------------------------------------------------------------
+    search_meta: {
+      description: 'Metadata for search index versioning and rebuilds.',
+      primaryKey: 'key',
+      columns: {
+        key: {
+          description: 'Metadata key (e.g., search_index_version)',
+          nullable: false,
+        },
+        value: {
+          description: 'Metadata value as string',
+          nullable: true,
+        },
+        updated_at: {
+          description: 'Last update time',
+          semanticType: 'timestamp',
+        },
       },
     },
 

@@ -232,10 +232,14 @@ export async function collectStatus(
     active_id: activeAccount?.id ?? null,
     active_phone: activeAccount?.phone ?? null,
     active_name: activeAccount?.name ?? null,
+    active_username: activeAccount?.username ?? null,
+    active_label: activeAccount?.label ?? null,
     accounts: accounts.map((a) => ({
       id: a.id,
       phone: a.phone,
       name: a.name,
+      username: a.username,
+      label: a.label,
       is_active: a.is_active === 1,
     })),
   }

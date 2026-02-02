@@ -1,36 +1,53 @@
-import type { ChatsCache } from '../../db/chats-cache'
-import type { UsersCache } from '../../db/users-cache'
+import type { TelegramClient } from '@mtcute/bun'
+import type { tl } from '@mtcute/tl'
+
+import type { CachedChat, ChatsCache } from '../../db/chats-cache'
+import type { CachedUser, UsersCache } from '../../db/users-cache'
 import {
   isUsernameIdentifier,
   normalizeUsername,
 } from '../../utils/identifiers'
+import { toLong } from '../../utils/long'
 import { verbose } from '../../utils/output'
 import { resolveUsername } from '../../utils/telegram-resolve'
 
-export type ResolvedPeer = { inputPeer: any; name: string }
+export type ResolvedPeer = { inputPeer: tl.TypeInputPeer; name: string }
+
+type TelegramClientLike = Pick<TelegramClient, 'call'>
 
 type CacheDeps = {
   usersCache: UsersCache
   chatsCache: ChatsCache
 }
 
-function buildUserPeerFromCache(user: any, fallbackName: string): ResolvedPeer {
+type CachedUserRef = Pick<
+  CachedUser,
+  'user_id' | 'access_hash' | 'display_name'
+>
+
+function buildUserPeerFromCache(
+  user: CachedUserRef,
+  fallbackName: string,
+): ResolvedPeer {
   return {
     inputPeer: {
       _: 'inputPeerUser',
       userId: Number(user.user_id),
-      accessHash: BigInt(user.access_hash),
+      accessHash: toLong(user.access_hash),
     },
     name: user.display_name || fallbackName,
   }
 }
 
-function buildUserPeerFromApi(user: any, fallbackName: string): ResolvedPeer {
+function buildUserPeerFromApi(
+  user: tl.RawUser,
+  fallbackName: string,
+): ResolvedPeer {
   return {
     inputPeer: {
       _: 'inputPeerUser',
       userId: user.id,
-      accessHash: BigInt(user.accessHash || 0),
+      accessHash: toLong(user.accessHash),
     },
     name:
       [user.firstName, user.lastName].filter(Boolean).join(' ') || fallbackName,
@@ -38,28 +55,30 @@ function buildUserPeerFromApi(user: any, fallbackName: string): ResolvedPeer {
 }
 
 function buildChannelPeerFromCache(
-  chat: any,
+  chat: CachedChat,
   fallbackName: string,
 ): ResolvedPeer {
   return {
     inputPeer: {
       _: 'inputPeerChannel',
       channelId: Number(chat.chat_id),
-      accessHash: BigInt(chat.access_hash),
+      accessHash: toLong(chat.access_hash),
     },
     name: chat.title || fallbackName,
   }
 }
 
+type ResolvedChannel = tl.RawChannel | tl.RawChannelForbidden
+
 function buildChannelPeerFromApi(
-  chat: any,
+  chat: ResolvedChannel,
   fallbackName: string,
 ): ResolvedPeer {
   return {
     inputPeer: {
       _: 'inputPeerChannel',
       channelId: chat.id,
-      accessHash: BigInt(chat.accessHash || 0),
+      accessHash: toLong(chat.accessHash),
     },
     name: chat.title || fallbackName,
   }
@@ -83,7 +102,7 @@ function normalizePhone(identifier: string): string | null {
 }
 
 async function resolveByUsername(
-  client: any,
+  client: TelegramClientLike,
   username: string,
   { usersCache, chatsCache }: CacheDeps,
 ): Promise<ResolvedPeer> {
@@ -104,21 +123,28 @@ async function resolveByUsername(
 
   verbose(`Resolving @${username} via API...`)
   const resolved = await resolveUsername(client, username)
-  const resolvedUser = resolved.users?.[0]
+  const resolvedUser = resolved.users?.find(
+    (user): user is tl.RawUser => user._ === 'user',
+  )
   if (resolvedUser) {
     return buildUserPeerFromApi(resolvedUser, `@${username}`)
   }
 
   const resolvedChat = resolved.chats?.[0]
   if (resolvedChat) {
-    return buildChannelPeerFromApi(resolvedChat, `@${username}`)
+    if (resolvedChat._ === 'channel' || resolvedChat._ === 'channelForbidden') {
+      return buildChannelPeerFromApi(resolvedChat, `@${username}`)
+    }
+    if (resolvedChat._ === 'chat' || resolvedChat._ === 'chatForbidden') {
+      return buildGroupPeer(resolvedChat.id, `@${username}`)
+    }
   }
 
   throw new Error(`Could not resolve @${username}`)
 }
 
 async function resolveByPhone(
-  client: any,
+  client: TelegramClientLike,
   identifier: string,
   phone: string,
   { usersCache }: CacheDeps,
@@ -130,13 +156,16 @@ async function resolveByPhone(
   }
 
   verbose(`Resolving phone ${identifier} via API...`)
-  let resolvedUser: any
+  let resolvedUser: tl.RawUser | null
   try {
-    const resolved = await client.call({
+    const request: tl.contacts.RawResolvePhoneRequest = {
       _: 'contacts.resolvePhone',
       phone,
-    } as any)
-    resolvedUser = resolved.users?.[0]
+    }
+    const resolved = await client.call(request)
+    resolvedUser =
+      resolved.users?.find((user): user is tl.RawUser => user._ === 'user') ??
+      null
   } catch {
     resolvedUser = null
   }
@@ -167,14 +196,14 @@ function resolveByNumericId(
   if (cachedChat) {
     verbose(`Found chat ID ${identifier} in cache`)
     if (cachedChat.type === 'private') {
-      return buildUserPeerFromCache(
-        {
-          user_id: cachedChat.chat_id,
-          access_hash: cachedChat.access_hash,
-          display_name: cachedChat.title,
+      return {
+        inputPeer: {
+          _: 'inputPeerUser',
+          userId: Number(cachedChat.chat_id),
+          accessHash: toLong(cachedChat.access_hash),
         },
-        `User ${numericId}`,
-      )
+        name: cachedChat.title || `User ${numericId}`,
+      }
     }
     if (cachedChat.type === 'group') {
       return buildGroupPeer(numericId, cachedChat.title || `Group ${numericId}`)
@@ -189,7 +218,7 @@ function resolveByNumericId(
 }
 
 export async function resolvePeer(
-  client: any,
+  client: TelegramClientLike,
   identifier: string,
   usersCache: UsersCache,
   chatsCache: ChatsCache,

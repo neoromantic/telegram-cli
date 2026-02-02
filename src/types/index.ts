@@ -8,6 +8,8 @@ export interface Account {
   phone: string
   user_id: number | null
   name: string | null
+  username: string | null
+  label: string | null
   session_data: string
   is_active: number
   created_at: string
@@ -19,7 +21,7 @@ export type OutputFormat = 'json' | 'pretty' | 'quiet'
 
 /** Global CLI options */
 export interface GlobalOptions {
-  account?: number
+  account?: string
   format?: OutputFormat
   verbose?: boolean
 }
@@ -59,6 +61,37 @@ export interface PaginatedResult<T> {
   offset: number
   limit: number
   hasMore: boolean
+}
+
+/** Message search result item */
+export interface MessageSearchItem {
+  chatId: number
+  messageId: number
+  fromId: number | null
+  text: string | null
+  messageType: string
+  hasMedia: boolean
+  mediaPath: string | null
+  isOutgoing: boolean
+  isEdited: boolean
+  isPinned: boolean
+  isDeleted: boolean
+  replyToId: number | null
+  forwardFromId: number | null
+  editDate: number | null
+  date: number
+  chat: {
+    id: number
+    title: string | null
+    username: string | null
+    type: string | null
+  }
+  sender: {
+    id: number | null
+    username: string | null
+    firstName: string | null
+    lastName: string | null
+  }
 }
 
 /** Auth state */

@@ -130,9 +130,15 @@ function printAccountsSection(status: StatusSnapshot): void {
     const activeName = status.accounts.active_name
       ? ` (${status.accounts.active_name})`
       : ''
+    const activeUsername = status.accounts.active_username
+      ? ` @${status.accounts.active_username}`
+      : ''
+    const activeLabel = status.accounts.active_label
+      ? ` [${status.accounts.active_label}]`
+      : ''
     printRow(
       'Active',
-      `${c.success(status.accounts.active_phone)}${c.dim(activeName)}`,
+      `${c.success(status.accounts.active_phone)}${c.dim(activeName)}${c.dim(activeUsername)}${c.dim(activeLabel)}`,
     )
   } else {
     printRow('Active', c.warning('None'))
@@ -146,8 +152,10 @@ function printAccountsSection(status: StatusSnapshot): void {
   for (const acc of status.accounts.accounts) {
     const activeMarker = acc.is_active ? c.success(icons.success) : c.dim(' ')
     const name = acc.name ? c.dim(` ${acc.name}`) : ''
+    const username = acc.username ? c.dim(` @${acc.username}`) : ''
+    const label = acc.label ? c.dim(` [${acc.label}]`) : ''
     console.log(
-      `    ${activeMarker} ${c.cyan(`#${acc.id}`)} ${c.value(acc.phone)}${name}`,
+      `    ${activeMarker} ${c.cyan(`#${acc.id}`)} ${c.value(acc.phone)}${name}${username}${label}`,
     )
   }
 }

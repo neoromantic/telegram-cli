@@ -1,4 +1,6 @@
-import type { UsersCache } from '../../db/users-cache'
+import type { tl } from '@mtcute/tl'
+
+import type { CachedUser, UsersCache } from '../../db/users-cache'
 
 export interface UserInfo {
   id: number
@@ -19,7 +21,7 @@ export interface ParsedIdentifier {
   raw: string
 }
 
-export function apiUserToUserInfo(user: any): UserInfo {
+export function apiUserToUserInfo(user: tl.RawUser): UserInfo {
   return {
     id: user.id,
     firstName: user.firstName ?? '',
@@ -32,7 +34,7 @@ export function apiUserToUserInfo(user: any): UserInfo {
   }
 }
 
-export function cachedUserToUserInfo(cached: any): UserInfo {
+export function cachedUserToUserInfo(cached: CachedUser): UserInfo {
   return {
     id: Number(cached.user_id),
     firstName: cached.first_name ?? '',
@@ -78,7 +80,7 @@ export function parseUserIdentifier(identifier: string): ParsedIdentifier {
 export function findCachedUser(
   usersCache: UsersCache,
   parsed: ParsedIdentifier,
-): any | null {
+): CachedUser | null {
   if (parsed.kind === 'username') {
     return usersCache.getByUsername(parsed.raw)
   }
