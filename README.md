@@ -14,7 +14,7 @@ Agent-friendly Telegram CLI client with full API support.
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/telegram-cli.git
+git clone <repo-url>
 cd telegram-cli
 
 # Install dependencies
@@ -27,15 +27,30 @@ cp .env.example .env
 
 ## Quick Start
 
+### Run from source (dev)
+
 ```bash
 # Login to your Telegram account
-bun run tg auth login --phone +79261408252
+bun run src/index.ts auth login --phone +79261408252
 
 # List your contacts
-bun run tg contacts list
+bun run src/index.ts contacts list
 
 # Call any Telegram API method
-bun run tg api account.checkUsername --username myuser
+bun run src/index.ts api account.checkUsername --username myuser
+```
+
+### Run installed binary
+
+```bash
+# Login to your Telegram account
+tg auth login --phone +79261408252
+
+# List your contacts
+tg contacts list
+
+# Call any Telegram API method
+tg api account.checkUsername --username myuser
 ```
 
 ## Commands
@@ -77,6 +92,35 @@ tg contacts search --query "John"
 
 # Get contact by ID
 tg contacts get --id 123456789
+```
+
+### Messaging
+
+```bash
+# Send a message
+tg send --to @username --message "Hello!"
+tg send --to 123456789 -m "Hello!"
+```
+
+### Daemon & Status
+
+```bash
+# Start/stop daemon
+tg daemon start
+tg daemon stop
+
+# Show system status
+tg status
+```
+
+### SQL (Read-only)
+
+```bash
+# Query cache database
+tg sql --query "SELECT * FROM users_cache LIMIT 10"
+
+# Inspect schema
+tg sql print-schema --table=users_cache
 ```
 
 ### Generic API Access
@@ -129,7 +173,7 @@ bun run dev
 bun run typecheck
 
 # Run tests
-bun test
+bun run test
 ```
 
 ## Architecture

@@ -52,30 +52,32 @@ function setNestedValue(
  * Parse a value to its appropriate type
  */
 function parseValue(value: unknown): unknown {
-  if (value === undefined || value === null) return value
-  if (typeof value !== 'string') return value
+  if (value === undefined || value === null || typeof value !== 'string') {
+    return value
+  }
 
-  // Boolean
-  if (value === 'true') return true
-  if (value === 'false') return false
+  let parsed: unknown = value
 
-  // Number
-  if (/^-?\d+$/.test(value)) return parseInt(value, 10)
-  if (/^-?\d+\.\d+$/.test(value)) return parseFloat(value)
-
-  // JSON object/array
-  if (
+  if (value === 'true') {
+    parsed = true
+  } else if (value === 'false') {
+    parsed = false
+  } else if (/^-?\d+$/.test(value)) {
+    parsed = parseInt(value, 10)
+  } else if (/^-?\d+\.\d+$/.test(value)) {
+    parsed = parseFloat(value)
+  } else if (
     (value.startsWith('{') && value.endsWith('}')) ||
     (value.startsWith('[') && value.endsWith(']'))
   ) {
     try {
-      return JSON.parse(value)
+      parsed = JSON.parse(value)
     } catch {
-      // Not valid JSON, return as string
+      parsed = value
     }
   }
 
-  return value
+  return parsed
 }
 
 /**

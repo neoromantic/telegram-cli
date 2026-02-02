@@ -272,6 +272,29 @@ describe('MessagesCache', () => {
       expect(result.get(3)).toBe(100)
       expect(result.has(999)).toBe(false)
     })
+
+    it('skips message IDs that exist in multiple chats', () => {
+      cache.upsert({
+        chat_id: 100,
+        message_id: 42,
+        text: 'Message in chat 100',
+        message_type: 'text',
+        date: Date.now(),
+        raw_json: '{}',
+      })
+      cache.upsert({
+        chat_id: 200,
+        message_id: 42,
+        text: 'Message in chat 200',
+        message_type: 'text',
+        date: Date.now(),
+        raw_json: '{}',
+      })
+
+      const result = cache.findChatIdsByMessageIds([42])
+
+      expect(result.has(42)).toBe(false)
+    })
   })
 
   describe('markDeletedByMessageIds', () => {
@@ -345,6 +368,58 @@ describe('MessagesCache', () => {
 
       expect(deletedCount).toBe(1)
       expect(cache.get(100, 5)?.is_deleted).toBe(1)
+    })
+
+    it('does not delete when message ID is ambiguous across chats', () => {
+      cache.upsert({
+        chat_id: 100,
+        message_id: 42,
+        text: 'Message in chat 100',
+        message_type: 'text',
+        date: Date.now(),
+        raw_json: '{}',
+      })
+      cache.upsert({
+        chat_id: 200,
+        message_id: 42,
+        text: 'Message in chat 200',
+        message_type: 'text',
+        date: Date.now(),
+        raw_json: '{}',
+      })
+
+      const deletedCount = cache.markDeletedByMessageIds([42])
+
+      expect(deletedCount).toBe(0)
+      expect(cache.get(100, 42)?.is_deleted).toBe(0)
+      expect(cache.get(200, 42)?.is_deleted).toBe(0)
+    })
+
+    it('deletes when only one matching message is not already deleted', () => {
+      cache.upsert({
+        chat_id: 100,
+        message_id: 42,
+        text: 'Message in chat 100',
+        message_type: 'text',
+        date: Date.now(),
+        raw_json: '{}',
+      })
+      cache.upsert({
+        chat_id: 200,
+        message_id: 42,
+        text: 'Message in chat 200',
+        message_type: 'text',
+        date: Date.now(),
+        raw_json: '{}',
+      })
+
+      cache.markDeleted(100, [42])
+
+      const deletedCount = cache.markDeletedByMessageIds([42])
+
+      expect(deletedCount).toBe(1)
+      expect(cache.get(100, 42)?.is_deleted).toBe(1)
+      expect(cache.get(200, 42)?.is_deleted).toBe(1)
     })
   })
 

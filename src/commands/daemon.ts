@@ -19,27 +19,7 @@ import { getCacheDb, getDataDir } from '../db'
 import { createDaemonStatusService } from '../db/daemon-status'
 import { ErrorCodes } from '../types'
 import { error, success } from '../utils/output'
-
-/**
- * Format duration in human-readable form
- */
-function formatDuration(ms: number): string {
-  const seconds = Math.floor(ms / 1000)
-  const minutes = Math.floor(seconds / 60)
-  const hours = Math.floor(minutes / 60)
-  const days = Math.floor(hours / 24)
-
-  if (days > 0) {
-    return `${days}d ${hours % 24}h ${minutes % 60}m`
-  }
-  if (hours > 0) {
-    return `${hours}h ${minutes % 60}m ${seconds % 60}s`
-  }
-  if (minutes > 0) {
-    return `${minutes}m ${seconds % 60}s`
-  }
-  return `${seconds}s`
-}
+import { formatDuration } from '../utils/time'
 
 /**
  * Start subcommand - starts daemon in foreground
@@ -105,7 +85,7 @@ const stopCommand = defineCommand({
 
     const pid = pidFile.read()
     if (pid === null) {
-      return error(ErrorCodes.DAEMON_NOT_RUNNING, 'Daemon is not running')
+      error(ErrorCodes.DAEMON_NOT_RUNNING, 'Daemon is not running')
     }
 
     const timeoutMs = parseInt(args.timeout, 10) * 1000
@@ -113,7 +93,7 @@ const stopCommand = defineCommand({
     // Send SIGTERM
     console.log(`Stopping daemon (PID ${pid})...`)
     if (!pidFile.sendSignal('SIGTERM')) {
-      return error(
+      error(
         ErrorCodes.DAEMON_SIGNAL_FAILED,
         'Failed to send stop signal to daemon',
       )
@@ -121,31 +101,40 @@ const stopCommand = defineCommand({
 
     // Wait for process to exit
     const startTime = Date.now()
+    let stopped = false
     while (Date.now() - startTime < timeoutMs) {
       if (!pidFile.isRunning()) {
-        return success({ message: 'Daemon stopped successfully' })
+        stopped = true
+        break
       }
       await new Promise((resolve) => setTimeout(resolve, 100))
     }
 
     // Graceful shutdown timed out
-    if (args.force) {
-      console.log('Graceful shutdown timed out, forcing kill...')
-      if (pidFile.sendSignal('SIGKILL')) {
-        // Wait a moment for the process to die
-        await new Promise((resolve) => setTimeout(resolve, 500))
-        if (!pidFile.isRunning()) {
-          return success({ message: 'Daemon forcefully stopped' })
-        }
-      }
-      return error(
-        ErrorCodes.DAEMON_FORCE_KILL_FAILED,
-        'Failed to forcefully stop daemon',
+    if (stopped) {
+      success({ message: 'Daemon stopped successfully' })
+      return
+    }
+
+    if (!args.force) {
+      error(
+        ErrorCodes.DAEMON_SHUTDOWN_TIMEOUT,
+        `Daemon did not stop within ${args.timeout} seconds. Use --force to forcefully kill.`,
       )
     }
-    return error(
-      ErrorCodes.DAEMON_SHUTDOWN_TIMEOUT,
-      `Daemon did not stop within ${args.timeout} seconds. Use --force to forcefully kill.`,
+
+    console.log('Graceful shutdown timed out, forcing kill...')
+    if (pidFile.sendSignal('SIGKILL')) {
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      if (!pidFile.isRunning()) {
+        success({ message: 'Daemon forcefully stopped' })
+        return
+      }
+    }
+
+    error(
+      ErrorCodes.DAEMON_FORCE_KILL_FAILED,
+      'Failed to forcefully stop daemon',
     )
   },
 })

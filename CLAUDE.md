@@ -372,11 +372,18 @@ src/
 │   ├── auth.ts           # login, logout, status
 │   ├── accounts.ts       # list, add, switch, remove
 │   ├── contacts.ts       # list, get, search
-│   ├── send.ts           # send messages
-│   ├── chats.ts          # list dialogs
 │   ├── daemon.ts         # start, stop, status
+│   ├── chats.ts          # chats barrel
+│   ├── chats/            # chats helpers
+│   ├── send.ts           # send barrel
+│   ├── send/             # peer resolution helpers
 │   ├── api.ts            # generic API command
-│   └── status.ts         # sync status, rate limits
+│   ├── sql.ts            # sql barrel
+│   ├── sql/              # schema + query helpers
+│   ├── status.ts         # status barrel
+│   ├── status/           # formatting helpers
+│   ├── user.ts           # user barrel
+│   └── user/             # me/lookup helpers
 ├── services/
 │   └── telegram.ts       # Client manager
 ├── db/
@@ -395,19 +402,40 @@ src/
 │   └── daemon-status.ts  # Daemon status key-value store
 ├── daemon/
 │   ├── index.ts          # Daemon entry point
-│   ├── daemon.ts         # Main daemon implementation
+│   ├── daemon.ts         # Main daemon implementation (thin)
+│   ├── daemon-context.ts # Context setup
+│   ├── daemon-logger.ts  # Logger setup
+│   ├── daemon-loop.ts    # Main loop orchestration
+│   ├── daemon-accounts.ts # Account wiring
+│   ├── daemon-scheduler.ts # Scheduler wiring
+│   ├── daemon-utils.ts   # Shared helpers
 │   ├── types.ts          # Daemon types and interfaces
 │   ├── handlers.ts       # Telegram update handlers
 │   ├── scheduler.ts      # Sync job scheduler
-│   ├── sync-worker.ts    # Sync worker (processes jobs)
+│   ├── sync-worker.ts    # Sync worker exports (barrel)
+│   ├── sync-worker-core.ts # Core job processing logic
+│   ├── sync-worker-real.ts # mtcute integration + exports
+│   ├── sync-worker-real-helpers.ts # API fetch helpers
+│   ├── sync-worker-real-context.ts # Real worker context
+│   ├── sync-worker-real-types.ts # Real worker types
+│   ├── sync-worker-real-jobs.ts # Real job handlers
+│   ├── sync-worker-runner.ts # Worker loop runner
+│   ├── sync-worker-utils.ts # Shared worker helpers
 │   ├── job-executor.ts   # Job executor (wraps sync worker)
 │   └── pid-file.ts       # PID file management
 ├── types/
 │   └── index.ts          # TypeScript types
 └── utils/
+    ├── args.ts           # CLI argument parsing
+    ├── cache-pagination.ts # Cache pagination helpers
+    ├── csv.ts            # CSV formatting
+    ├── formatting.ts     # Shared pretty format helpers
+    ├── identifiers.ts    # Identifier parsing helpers
+    ├── message-parser.ts # Message parsing and forward attribution
     ├── output.ts         # JSON/pretty output
-    ├── config.ts         # Config loading
-    └── message-parser.ts # Message parsing and forward attribution
+    ├── telegram-mappers.ts # mtcute → cache mappers
+    ├── telegram-resolve.ts # Peer resolution helpers
+    └── time.ts           # Time utilities
 ```
 
 ---

@@ -117,20 +117,28 @@ export function error(
  * Map error code to exit code
  */
 export function getExitCode(code: ErrorCode): number {
-  switch (code) {
-    case 'AUTH_REQUIRED':
-      return 2
-    case 'INVALID_ARGS':
-      return 3
-    case 'NETWORK_ERROR':
-      return 4
-    case 'TELEGRAM_ERROR':
-      return 5
-    case 'ACCOUNT_NOT_FOUND':
-      return 6
-    default:
-      return 1
+  const exitCodes: Record<ErrorCode, number> = {
+    AUTH_REQUIRED: 2,
+    INVALID_ARGS: 3,
+    NETWORK_ERROR: 4,
+    TELEGRAM_ERROR: 5,
+    ACCOUNT_NOT_FOUND: 6,
+    NO_ACTIVE_ACCOUNT: 1,
+    PHONE_CODE_INVALID: 1,
+    SESSION_PASSWORD_NEEDED: 1,
+    DAEMON_NOT_RUNNING: 1,
+    DAEMON_ALREADY_RUNNING: 1,
+    DAEMON_SIGNAL_FAILED: 1,
+    DAEMON_SHUTDOWN_TIMEOUT: 1,
+    DAEMON_FORCE_KILL_FAILED: 1,
+    GENERAL_ERROR: 1,
+    SQL_WRITE_NOT_ALLOWED: 1,
+    SQL_SYNTAX_ERROR: 1,
+    SQL_TABLE_NOT_FOUND: 1,
+    SQL_OPERATION_BLOCKED: 1,
   }
+
+  return exitCodes[code] ?? 1
 }
 
 /**

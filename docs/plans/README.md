@@ -21,20 +21,20 @@ This directory contains detailed implementation plans for telegram-cli features.
 | [cli-commands.md](./cli-commands.md) | CLI commands: auth, accounts, contacts, chats, send | **Implemented** |
 | [contacts.md](./contacts.md) | Contact management with caching | **Implemented** |
 | [multi-account.md](./multi-account.md) | Per-account storage, labels | Partial |
-| [rate-limiting.md](./rate-limiting.md) | FLOOD_WAIT handling, `tg status` | Planning |
+| [rate-limiting.md](./rate-limiting.md) | FLOOD_WAIT handling, `tg status` | Partial |
 | [ai-integration.md](./ai-integration.md) | Skills, Claude Code, self-install | Planning |
 | [configuration.md](./configuration.md) | config.json, env vars, defaults | Planning |
 | [build-distribution.md](./build-distribution.md) | Publishing, releases, homebrew | **Implemented** |
 | [testing.md](./testing.md) | Unit + E2E tests | **Implemented** |
+| [../sql.md](../sql.md) | SQL command (read-only cache access) | **Implemented** |
+| [real-time.md](./real-time.md) | Real-time event handlers | **Implemented** |
 
 ### Future Features
 
 | Document | Description | Status |
 |----------|-------------|--------|
 | [search.md](./search.md) | FTS5 full-text search | Planning |
-| [sql-command.md](./sql-command.md) | Direct SQL access to cache database | Planning |
 | [groups.md](./groups.md) | Group operations | Planning |
-| [real-time.md](./real-time.md) | Real-time event handlers | Planning |
 | [channel-tags.md](./channel-tags.md) | Channel tagging system | Planning |
 | [core-infrastructure.md](./core-infrastructure.md) | Store/config patterns | Partial |
 

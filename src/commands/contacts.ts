@@ -6,55 +6,16 @@ import { defineCommand } from 'citty'
 
 import { getCacheDb } from '../db'
 import { getDefaultCacheConfig, isCacheStale } from '../db/types'
-import { createUsersCache, type UserCacheInput } from '../db/users-cache'
+import { createUsersCache } from '../db/users-cache'
 import { getClientForAccount } from '../services/telegram'
 import { type Contact, ErrorCodes, type PaginatedResult } from '../types'
+import { buildCachePaginatedResponse } from '../utils/cache-pagination'
 import { error, success, verbose } from '../utils/output'
-
-/**
- * Convert Telegram API user to Contact
- */
-function apiUserToContact(user: any): Contact {
-  return {
-    id: user.id,
-    firstName: user.firstName ?? '',
-    lastName: user.lastName ?? null,
-    username: user.username ?? null,
-    phone: user.phone ?? null,
-  }
-}
-
-/**
- * Convert Telegram API user to UserCacheInput
- */
-function apiUserToCacheInput(user: any): UserCacheInput {
-  return {
-    user_id: String(user.id),
-    username: user.username ?? null,
-    first_name: user.firstName ?? null,
-    last_name: user.lastName ?? null,
-    phone: user.phone ?? null,
-    access_hash: user.accessHash ? String(user.accessHash) : null,
-    is_contact: user.contact ? 1 : 0,
-    is_bot: user.bot ? 1 : 0,
-    is_premium: user.premium ? 1 : 0,
-    fetched_at: Date.now(),
-    raw_json: JSON.stringify(user),
-  }
-}
-
-/**
- * Convert cached user to Contact
- */
-function cachedUserToContact(cached: any): Contact {
-  return {
-    id: Number(cached.user_id),
-    firstName: cached.first_name ?? '',
-    lastName: cached.last_name ?? null,
-    username: cached.username ?? null,
-    phone: cached.phone ?? null,
-  }
-}
+import {
+  apiUserToCacheInput,
+  apiUserToContact,
+  cachedUserToContact,
+} from '../utils/telegram-mappers'
 
 /**
  * List contacts
@@ -104,36 +65,18 @@ export const listContactsCommand = defineCommand({
         const contacts = cachedUsers.filter((u) => u.is_contact === 1)
 
         if (contacts.length > 0) {
-          // Check if any are stale
-          const anyStale = contacts.some((u) =>
-            isCacheStale(u.fetched_at, cacheConfig.staleness.peers),
+          const response = buildCachePaginatedResponse(
+            contacts,
+            cachedUserToContact,
+            {
+              offset,
+              limit,
+              ttlMs: cacheConfig.staleness.peers,
+              source: 'cache',
+            },
           )
 
-          // Apply pagination
-          const paginatedContacts = contacts
-            .slice(offset, offset + limit)
-            .map(cachedUserToContact)
-
-          const response: PaginatedResult<Contact> & {
-            source: string
-            stale: boolean
-          } = {
-            items: paginatedContacts,
-            total: contacts.length,
-            offset,
-            limit,
-            hasMore: offset + limit < contacts.length,
-            source: 'cache',
-            stale: anyStale,
-          }
-
-          if (anyStale) {
-            verbose(
-              'Cache is stale, consider using --fresh flag to refresh data',
-            )
-          }
-
-          success(response)
+          success(response as PaginatedResult<Contact>)
           return
         }
       }

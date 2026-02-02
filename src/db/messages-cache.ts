@@ -209,16 +209,21 @@ export function createMessagesCache(db: Database): MessagesCache {
       // Query each message ID to find its chat
       // Note: This does a table scan per message ID, but delete events typically have few IDs
       const stmt = db.query(
-        'SELECT chat_id, message_id FROM messages_cache WHERE message_id = $message_id LIMIT 1',
+        'SELECT chat_id FROM messages_cache WHERE message_id = $message_id AND is_deleted = 0',
       )
 
       for (const messageId of messageIds) {
-        const row = stmt.get({ $message_id: messageId }) as {
+        const rows = stmt.all({ $message_id: messageId }) as Array<{
           chat_id: number
-          message_id: number
-        } | null
-        if (row) {
-          result.set(row.message_id, row.chat_id)
+        }>
+        if (rows.length === 0) continue
+
+        const uniqueChatIds = new Set(rows.map((row) => row.chat_id))
+        if (uniqueChatIds.size === 1) {
+          const [chatId] = uniqueChatIds
+          if (chatId !== undefined) {
+            result.set(messageId, chatId)
+          }
         }
       }
 

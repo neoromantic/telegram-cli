@@ -133,37 +133,29 @@ export function determineMessageType(message: RawMessage): string {
   if (message._ === 'messageService') return 'service'
   if (message._ === 'messageEmpty') return 'empty'
 
-  if (!message.media) return 'text'
+  let messageType = 'text'
+  if (message.media) {
+    const mediaType = message.media._
+    const mediaMap: Record<string, string> = {
+      messageMediaPhoto: 'photo',
+      messageMediaDocument: 'document',
+      messageMediaVideo: 'video',
+      messageMediaAudio: 'audio',
+      messageMediaVoice: 'voice',
+      messageMediaVideoNote: 'video_note',
+      messageMediaSticker: 'sticker',
+      messageMediaGeo: 'location',
+      messageMediaGeoLive: 'location',
+      messageMediaContact: 'contact',
+      messageMediaPoll: 'poll',
+      messageMediaDice: 'dice',
+      messageMediaWebPage: 'text',
+    }
 
-  switch (message.media._) {
-    case 'messageMediaPhoto':
-      return 'photo'
-    case 'messageMediaDocument':
-      return 'document'
-    case 'messageMediaVideo':
-      return 'video'
-    case 'messageMediaAudio':
-      return 'audio'
-    case 'messageMediaVoice':
-      return 'voice'
-    case 'messageMediaVideoNote':
-      return 'video_note'
-    case 'messageMediaSticker':
-      return 'sticker'
-    case 'messageMediaGeo':
-    case 'messageMediaGeoLive':
-      return 'location'
-    case 'messageMediaContact':
-      return 'contact'
-    case 'messageMediaPoll':
-      return 'poll'
-    case 'messageMediaDice':
-      return 'dice'
-    case 'messageMediaWebPage':
-      return 'text' // Web previews are still text messages
-    default:
-      return 'unknown'
+    messageType = mediaMap[mediaType] ?? 'unknown'
   }
+
+  return messageType
 }
 
 /**

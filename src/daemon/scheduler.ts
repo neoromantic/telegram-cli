@@ -69,190 +69,190 @@ export interface SyncSchedulerOptions {
 /**
  * Create sync scheduler
  */
+class SyncSchedulerImpl implements SyncScheduler {
+  constructor(private readonly options: SyncSchedulerOptions) {}
+
+  private get jobsService() {
+    return this.options.jobsService
+  }
+
+  private get chatSyncState() {
+    return this.options.chatSyncState
+  }
+
+  private get messagesCache() {
+    return this.options.messagesCache
+  }
+
+  queueForwardCatchup(chatId: number): void {
+    if (
+      this.jobsService.hasPendingJobForChat(chatId, SyncJobType.ForwardCatchup)
+    ) {
+      return
+    }
+
+    this.jobsService.create({
+      chat_id: chatId,
+      job_type: SyncJobType.ForwardCatchup,
+      priority: SyncPriority.Realtime,
+    })
+  }
+
+  queueBackwardHistory(chatId: number): void {
+    const state = this.chatSyncState.get(chatId)
+    if (state?.history_complete) {
+      return
+    }
+
+    if (
+      this.jobsService.hasPendingJobForChat(chatId, SyncJobType.BackwardHistory)
+    ) {
+      return
+    }
+
+    if (state?.backward_cursor === null) {
+      const cachedCount = this.messagesCache.countByChatId(chatId)
+      if (cachedCount === 0) {
+        if (
+          !this.jobsService.hasPendingJobForChat(
+            chatId,
+            SyncJobType.InitialLoad,
+          )
+        ) {
+          this.jobsService.create({
+            chat_id: chatId,
+            job_type: SyncJobType.InitialLoad,
+            priority: state?.sync_priority ?? SyncPriority.Medium,
+          })
+        }
+        return
+      }
+    }
+
+    this.jobsService.create({
+      chat_id: chatId,
+      job_type: SyncJobType.BackwardHistory,
+      priority: SyncPriority.Background,
+    })
+  }
+
+  queueInitialLoad(chatId: number, _messageCount: number): void {
+    if (
+      this.jobsService.hasPendingJobForChat(chatId, SyncJobType.InitialLoad)
+    ) {
+      return
+    }
+
+    const state = this.chatSyncState.get(chatId)
+    const priority = state?.sync_priority ?? SyncPriority.Medium
+
+    this.jobsService.create({
+      chat_id: chatId,
+      job_type: SyncJobType.InitialLoad,
+      priority,
+    })
+  }
+
+  async initializeForStartup(): Promise<void> {
+    this.recoverCrashedJobs()
+
+    const enabledChats = this.chatSyncState.getEnabledChats()
+    for (const chat of enabledChats) {
+      this.queueForwardCatchup(chat.chat_id)
+    }
+
+    const highPriorityChats = this.chatSyncState.getChatsByPriority(
+      SyncPriority.High,
+    )
+    for (const chat of highPriorityChats) {
+      if (!chat.history_complete && chat.synced_messages === 0) {
+        this.queueInitialLoad(chat.chat_id, 10)
+      }
+    }
+
+    const mediumChats = this.chatSyncState.getChatsByPriority(
+      SyncPriority.Medium,
+    )
+    for (const chat of mediumChats) {
+      if (!chat.history_complete && chat.synced_messages === 0) {
+        this.queueInitialLoad(chat.chat_id, 10)
+      }
+    }
+
+    const incompleteChats = this.chatSyncState.getIncompleteHistory()
+    for (const chat of incompleteChats) {
+      if (chat.sync_priority <= SyncPriority.Medium) {
+        this.queueBackwardHistory(chat.chat_id)
+      }
+    }
+  }
+
+  getNextJob(): SyncJobRow | null {
+    return this.jobsService.getNextPending()
+  }
+
+  claimNextJob(): SyncJobRow | null {
+    return this.jobsService.claimNextJob()
+  }
+
+  startJob(jobId: number): void {
+    this.jobsService.markRunning(jobId)
+  }
+
+  completeJob(jobId: number): void {
+    this.jobsService.markCompleted(jobId)
+  }
+
+  failJob(jobId: number, errorMessage: string): void {
+    this.jobsService.markFailed(jobId, errorMessage)
+  }
+
+  updateProgress(
+    jobId: number,
+    messagesFetched: number,
+    cursor?: number,
+  ): void {
+    this.jobsService.updateProgress(jobId, {
+      messages_fetched: messagesFetched,
+      cursor_end: cursor,
+    })
+  }
+
+  getStatus(): SchedulerStatus {
+    const runningJobs = this.jobsService.getRunningJobs()
+    const pendingJobs = this.jobsService.getPendingJobs()
+
+    const jobsByType: Record<string, number> = {}
+    const jobsByPriority: Record<number, number> = {}
+
+    for (const job of pendingJobs) {
+      jobsByType[job.job_type] = (jobsByType[job.job_type] ?? 0) + 1
+      jobsByPriority[job.priority] = (jobsByPriority[job.priority] ?? 0) + 1
+    }
+
+    return {
+      pendingJobs: pendingJobs.length,
+      runningJobs: runningJobs.length,
+      jobsByType,
+      jobsByPriority,
+    }
+  }
+
+  cleanup(maxAgeMs = 24 * 60 * 60 * 1000): number {
+    return this.jobsService.cleanupCompleted(maxAgeMs)
+  }
+
+  cancelJobsForChat(chatId: number): number {
+    return this.jobsService.cancelPendingForChat(chatId)
+  }
+
+  recoverCrashedJobs(): number {
+    return this.jobsService.recoverCrashedJobs()
+  }
+}
+
 export function createSyncScheduler(
   options: SyncSchedulerOptions,
 ): SyncScheduler {
-  const { jobsService, chatSyncState } = options
-
-  return {
-    queueForwardCatchup(chatId: number): void {
-      // Check if there's already a pending catchup job
-      if (
-        jobsService.hasPendingJobForChat(chatId, SyncJobType.ForwardCatchup)
-      ) {
-        return
-      }
-
-      // Forward catchup is highest priority (P0)
-      jobsService.create({
-        chat_id: chatId,
-        job_type: SyncJobType.ForwardCatchup,
-        priority: SyncPriority.Realtime,
-      })
-    },
-
-    queueBackwardHistory(chatId: number): void {
-      // Check if history is already complete
-      const state = chatSyncState.get(chatId)
-      if (state?.history_complete) {
-        return
-      }
-
-      // Check if there's already a pending history job
-      if (
-        jobsService.hasPendingJobForChat(chatId, SyncJobType.BackwardHistory)
-      ) {
-        return
-      }
-
-      // ISSUE-6 FIX: If backward_cursor is null and no cached messages exist,
-      // skip backward sync. Using offsetId: 0 with Telegram API fetches from
-      // latest (not beginning), causing infinite loop. Use initial load instead.
-      if (state?.backward_cursor === null) {
-        const cachedCount = options.messagesCache.countByChatId(chatId)
-        if (cachedCount === 0) {
-          // No cursor and no cached messages - use initial load instead
-          // Queue initial load if not already pending
-          if (
-            !jobsService.hasPendingJobForChat(chatId, SyncJobType.InitialLoad)
-          ) {
-            jobsService.create({
-              chat_id: chatId,
-              job_type: SyncJobType.InitialLoad,
-              priority: state?.sync_priority ?? SyncPriority.Medium,
-            })
-          }
-          return
-        }
-      }
-
-      // History sync is background priority (P4)
-      jobsService.create({
-        chat_id: chatId,
-        job_type: SyncJobType.BackwardHistory,
-        priority: SyncPriority.Background,
-      })
-    },
-
-    queueInitialLoad(chatId: number, _messageCount: number): void {
-      // Check if there's already a pending initial load job
-      if (jobsService.hasPendingJobForChat(chatId, SyncJobType.InitialLoad)) {
-        return
-      }
-
-      // Get chat priority from sync state
-      const state = chatSyncState.get(chatId)
-      const priority = state?.sync_priority ?? SyncPriority.Medium
-
-      jobsService.create({
-        chat_id: chatId,
-        job_type: SyncJobType.InitialLoad,
-        priority,
-      })
-    },
-
-    async initializeForStartup(): Promise<void> {
-      // Recover any jobs that were running when daemon crashed
-      this.recoverCrashedJobs()
-
-      // Get all enabled chats
-      const enabledChats = chatSyncState.getEnabledChats()
-
-      // Queue forward catchup for all enabled chats (P0 priority)
-      for (const chat of enabledChats) {
-        this.queueForwardCatchup(chat.chat_id)
-      }
-
-      // Queue initial load for high and medium priority chats without history
-      // High priority = DMs and small groups (<20 members)
-      // Medium priority = Medium groups (20-100 members)
-      const highPriorityChats = chatSyncState.getChatsByPriority(
-        SyncPriority.High,
-      )
-      for (const chat of highPriorityChats) {
-        if (!chat.history_complete && chat.synced_messages === 0) {
-          this.queueInitialLoad(chat.chat_id, 10)
-        }
-      }
-
-      const mediumChats = chatSyncState.getChatsByPriority(SyncPriority.Medium)
-      for (const chat of mediumChats) {
-        if (!chat.history_complete && chat.synced_messages === 0) {
-          this.queueInitialLoad(chat.chat_id, 10)
-        }
-      }
-
-      // Queue background history sync for chats with incomplete history
-      const incompleteChats = chatSyncState.getIncompleteHistory()
-      for (const chat of incompleteChats) {
-        if (chat.sync_priority <= SyncPriority.Medium) {
-          this.queueBackwardHistory(chat.chat_id)
-        }
-      }
-    },
-
-    getNextJob(): SyncJobRow | null {
-      return jobsService.getNextPending()
-    },
-
-    claimNextJob(): SyncJobRow | null {
-      return jobsService.claimNextJob()
-    },
-
-    startJob(jobId: number): void {
-      jobsService.markRunning(jobId)
-    },
-
-    completeJob(jobId: number): void {
-      jobsService.markCompleted(jobId)
-    },
-
-    failJob(jobId: number, errorMessage: string): void {
-      jobsService.markFailed(jobId, errorMessage)
-    },
-
-    updateProgress(
-      jobId: number,
-      messagesFetched: number,
-      cursor?: number,
-    ): void {
-      jobsService.updateProgress(jobId, {
-        messages_fetched: messagesFetched,
-        cursor_end: cursor,
-      })
-    },
-
-    getStatus(): SchedulerStatus {
-      const runningJobs = jobsService.getRunningJobs()
-      const pendingJobs = jobsService.getPendingJobs()
-
-      const jobsByType: Record<string, number> = {}
-      const jobsByPriority: Record<number, number> = {}
-
-      // Count pending jobs by type and priority
-      for (const job of pendingJobs) {
-        jobsByType[job.job_type] = (jobsByType[job.job_type] ?? 0) + 1
-        jobsByPriority[job.priority] = (jobsByPriority[job.priority] ?? 0) + 1
-      }
-
-      return {
-        pendingJobs: pendingJobs.length,
-        runningJobs: runningJobs.length,
-        jobsByType,
-        jobsByPriority,
-      }
-    },
-
-    cleanup(maxAgeMs = 24 * 60 * 60 * 1000): number {
-      return jobsService.cleanupCompleted(maxAgeMs)
-    },
-
-    cancelJobsForChat(chatId: number): number {
-      return jobsService.cancelPendingForChat(chatId)
-    },
-
-    recoverCrashedJobs(): number {
-      return jobsService.recoverCrashedJobs()
-    },
-  }
+  return new SyncSchedulerImpl(options)
 }

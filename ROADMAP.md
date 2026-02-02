@@ -49,16 +49,16 @@ A complete Telegram CLI client for developers and AI agents. Installable via `bu
 - [x] Generic cache service with staleness checking
 - [x] Users cache service (UsersCache)
 - [x] Chats cache service (ChatsCache)
-- [x] Comprehensive tests (942 unit tests total)
+- [x] Comprehensive tests (950 unit tests total)
 
-→ [Database Schema](docs/plans/database-schema.md)
+→ [Database Schema](docs/database-schema.md)
 
 ### Phase 5: Core Commands ✅
 - [x] `tg contacts list/get/search` (with UsersCache)
-- [x] `tg send @user "message"` (with cache-based peer resolution)
+- [x] `tg send --to @user --message "message"` (with cache-based peer resolution)
 - [x] `tg chats list/get/search` (with ChatsCache)
 - [x] `tg me` / `tg user @username`
-- [ ] `tg status`
+- [x] `tg status`
 
 → [CLI Commands](docs/plans/cli-commands.md)
 
@@ -77,14 +77,14 @@ A complete Telegram CLI client for developers and AI agents. Installable via `bu
 → [AI Integration](docs/plans/ai-integration.md)
 
 ### Phase 8: Testing & Docs
-- [x] Unit testing setup (942 unit tests)
+- [x] Unit testing setup (950 unit tests)
 - [x] GitHub Actions CI (lint, typecheck, test, build-test)
 - [x] E2E testing setup (80 E2E tests)
   - [x] CLI execution helper (`Bun.spawn`)
   - [x] Test isolation via `TELEGRAM_CLI_DATA_DIR`
   - [x] Help/format/accounts/exit-code tests
 - [x] Build & distribution scripts
-- **Total: 1022 tests (942 unit + 80 E2E), ~85% line coverage**
+- **Total: 1030 tests (950 unit + 80 E2E), ~85% line coverage**
 - [ ] Snapshot testing setup
 - [ ] Mock HTTP layer
 - [ ] Integration test suite with TELEGRAM_TEST_ACCOUNT env var
@@ -123,6 +123,13 @@ The following 16 issues have been resolved:
 | #25 | Forward from peerChat not handled | Added peerChat handling in message parser |
 | #27 | Cannot reset cursors to NULL | Added resetSyncState() method |
 | docs | CLAUDE.md missing files | Updated file structure section |
+
+**Recent maintenance (2026-02-02):**
+- Modularized command implementations into focused subfolders (chats/send/user/sql/status) with shared helpers.
+- Modularized daemon implementation (context/logger/loop/scheduler/accounts/utils) and split real worker helpers/types/jobs.
+- Added shared formatting helpers for status output.
+- Delete events without chat IDs now resolve via cache lookup; ambiguous IDs remain skipped (see #28).
+- Full verification suite run (lint, typecheck, unit, E2E, build, install, qlty smells).
 
 ### P0: Critical Issues (Fix Before Production)
 
@@ -377,7 +384,7 @@ const data: NewMessageData = {
 ---
 
 #### 15. `lastJobProcessTime` Set Before Execution
-**Location:** `src/daemon/daemon.ts:480`
+**Location:** `src/daemon/daemon-scheduler.ts`
 
 **Problem:**
 ```typescript
@@ -392,7 +399,7 @@ const result = await executor.execute(job)  // Takes time
 ---
 
 #### 16. Health Check Uses Expensive `getMe()` API Call
-**Location:** `src/daemon/daemon.ts:558`
+**Location:** `src/daemon/daemon-loop.ts`
 
 **Problem:** Calls `client.getMe()` every 10 seconds for EACH connected account.
 
@@ -452,7 +459,7 @@ const mediumChats = chatSyncState.getChatsByPriority(SyncPriority.Medium)
 ---
 
 #### 21. Services Created Every Loop Iteration
-**Location:** `src/daemon/daemon.ts:573-575`
+**Location:** `src/daemon/daemon-loop.ts`
 
 **Problem:**
 ```typescript
@@ -468,10 +475,21 @@ while (!state.shutdownRequested) {
 
 ---
 
+#### 28. Ambiguous Delete Events Can Skip Valid Deletions
+**Location:** `src/db/messages-cache.ts` (`findChatIdsByMessageIds`)
+
+**Problem:** `updateDeleteMessages` lacks chat context. When the same `message_id` exists in multiple chats, deletion is ambiguous. The current safe behavior is to **skip** ambiguous IDs to avoid corrupting unrelated chats.
+
+**Impact:** Some deleted messages may remain in cache when IDs collide across chats.
+
+**Fix:** Maintain per-chat delete context (e.g., track recent message IDs per chat from update stream), or store a short-lived reverse index from `message_id` → `chat_id` scoped to recent updates to disambiguate.
+
+---
+
 ### P3: Low Severity / Enhancements
 
 #### 22. Error Stack Traces Lost
-**Location:** `src/daemon/daemon.ts:185, 206, 234`
+**Location:** `src/daemon/daemon-accounts.ts`, `src/daemon/daemon-loop.ts`, `src/daemon/handlers.ts`
 
 **Problem:** `logger.error(\`Error: ${err}\`)` only logs message, not stack trace.
 
@@ -489,7 +507,7 @@ while (!state.shutdownRequested) {
 ---
 
 #### 24. `messageType` Oversimplified
-**Location:** `src/daemon/daemon.ts:180-181`
+**Location:** `src/daemon/daemon-accounts.ts`
 
 **Problem:** `messageType: msg.media ? 'media' : 'text'` loses specificity.
 
@@ -507,7 +525,7 @@ while (!state.shutdownRequested) {
 ---
 
 #### 26. No Service Message Filtering
-**Location:** `src/daemon/daemon.ts:170-192`
+**Location:** `src/daemon/daemon-accounts.ts`
 
 **Problem:** Service messages (user joined, left, title changed) processed as regular messages.
 
@@ -571,7 +589,7 @@ The daemon has **NO contact synchronization**:
 | File | Issue | Status |
 |------|-------|--------|
 | `CLAUDE.md` | Missing 9 daemon/db files from file structure | ✅ Fixed |
-| `progress.md` | Test count discrepancy | ✅ Fixed (now 1022 tests) |
+| `progress.md` | Test count discrepancy | ✅ Fixed (now 1030 tests) |
 | `docs/plans/sync-strategy.md` | Implementation phase checkboxes outdated |
 
 **Missing from CLAUDE.md file structure:**
@@ -657,6 +675,7 @@ The daemon has **NO contact synchronization**:
 | [auth.md](docs/auth.md) | Authentication (phone, QR code) |
 | [database-schema.md](docs/database-schema.md) | Tables, indexes, schema |
 | [caching.md](docs/caching.md) | Stale-while-revalidate, `--fresh` flag |
+| [sql.md](docs/sql.md) | Read-only SQL access to cache database |
 
 ### Planned (docs/plans/)
 

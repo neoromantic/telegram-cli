@@ -2,7 +2,7 @@
 
 ## Current Status: Phase 5 Complete - Sync System Implementation
 
-**Last updated**: 2026-02-02 (16 technical debt issues fixed)
+**Last updated**: 2026-02-02 (modularization + verification complete)
 
 ## What's Working
 
@@ -17,6 +17,8 @@
 | **Send Messages** | ✅ Complete | Send to users, groups, channels |
 | **User Lookup** | ✅ Complete | `tg me`, `tg user @username/ID/phone` |
 | **Generic API** | ✅ Complete | `tg api <method>` for any Telegram call |
+| **SQL Command** | ✅ Complete | `tg sql` read-only cache queries + schema |
+| **System Status** | ✅ Complete | `tg status` daemon + sync + rate limits |
 | **Output Formatting** | ✅ Complete | JSON, pretty, quiet modes |
 | **Database Layer** | ✅ Complete | Cache schema, users/chats cache, rate limits |
 | **Caching** | ✅ Complete | Stale-while-revalidate pattern, `--fresh` bypass |
@@ -27,16 +29,26 @@
 | **Real-time Sync** | ✅ Complete | mtcute event wiring, update processing, cursor management |
 | **Sync Workers** | ✅ Complete | ForwardCatchup, BackwardHistory, InitialLoad jobs |
 | **Job Executor** | ✅ Complete | Rate-limited job execution with flood wait handling |
-| **Unit Tests** | ✅ Complete | 942 tests in `src/__tests__/` |
+| **Unit Tests** | ✅ Complete | 950 tests in `src/__tests__/` |
 | **E2E Tests** | ✅ Complete | 80 tests in `src/__e2e__/` |
 | **CI Pipeline** | ✅ Complete | lint, typecheck, test, build-test |
 | **Build System** | ✅ Complete | Native binary compilation, cross-platform |
 
 ### 📊 Test Coverage
 
-- **1022 total tests** (942 unit + 80 E2E)
+- **1030 total tests** (950 unit + 80 E2E)
 - **~85% line coverage**
 - **~80% function coverage**
+
+### ✅ Verification (2026-02-02)
+
+- `bun run lint`
+- `bun run typecheck`
+- `bun run test`
+- `bun run test:e2e`
+- `bun run test:build`
+- `bun run test:install`
+- `qlty smells`
 
 ### 🗄️ Database Layer (New)
 
@@ -90,9 +102,17 @@ telegram-cli/
 │   │   ├── auth.ts           # login, login-qr, logout, status
 │   │   ├── accounts.ts       # list, switch, remove, info
 │   │   ├── contacts.ts       # list, search, get (with caching)
-│   │   ├── chats.ts          # list, search, get (with caching)
-│   │   ├── send.ts           # send messages
-│   │   ├── user.ts           # me, user lookup
+│   │   ├── daemon.ts         # daemon start/stop/status
+│   │   ├── chats.ts          # list/search/get barrel
+│   │   ├── chats/            # chats helpers
+│   │   ├── send.ts           # send barrel
+│   │   ├── send/             # peer resolution helpers
+│   │   ├── status.ts         # status barrel
+│   │   ├── status/           # formatting helpers
+│   │   ├── sql.ts            # sql barrel
+│   │   ├── sql/              # schema + query helpers
+│   │   ├── user.ts           # user barrel
+│   │   ├── user/             # me/lookup helpers
 │   │   └── api.ts            # generic API command
 │   ├── services/
 │   │   └── telegram.ts       # client manager
@@ -103,24 +123,42 @@ telegram-cli/
 │   │   ├── users-cache.ts    # UsersCache service
 │   │   ├── chats-cache.ts    # ChatsCache service
 │   │   ├── messages-cache.ts # MessagesCache service
-│   │   ├── sync-state.ts     # Chat sync state management
+│   │   ├── chat-sync-state.ts # Chat sync state management
 │   │   ├── sync-jobs.ts      # Sync job queue
 │   │   ├── rate-limits.ts    # Rate limiting service
 │   │   └── types.ts          # Cache types & utilities
 │   ├── types/
 │   │   └── index.ts          # TypeScript types
 │   ├── utils/
+│   │   ├── args.ts           # CLI argument parsing
+│   │   ├── csv.ts            # CSV formatting
+│   │   ├── formatting.ts     # shared pretty format helpers
+│   │   ├── message-parser.ts # Raw message parsing utilities
 │   │   └── output.ts         # JSON/pretty/quiet output
 │   ├── daemon/
 │   │   ├── index.ts          # Daemon entry point + exports
-│   │   ├── daemon.ts         # Main daemon implementation
+│   │   ├── daemon.ts         # Main daemon implementation (thin)
+│   │   ├── daemon-context.ts # Context setup
+│   │   ├── daemon-logger.ts  # Logger setup
+│   │   ├── daemon-loop.ts    # Main loop orchestration
+│   │   ├── daemon-accounts.ts # Account wiring
+│   │   ├── daemon-scheduler.ts # Scheduler wiring
+│   │   ├── daemon-utils.ts   # Shared helpers
 │   │   ├── handlers.ts       # Update handlers (new message, edit, delete)
 │   │   ├── scheduler.ts      # Sync job scheduler
-│   │   ├── sync-worker.ts    # Sync worker (processes jobs)
+│   │   ├── sync-worker.ts    # Sync worker exports (barrel)
+│   │   ├── sync-worker-core.ts # Core job processing logic
+│   │   ├── sync-worker-real.ts # mtcute integration + exports
+│   │   ├── sync-worker-real-helpers.ts # API fetch helpers
+│   │   ├── sync-worker-real-context.ts # Real worker context
+│   │   ├── sync-worker-real-types.ts # Real worker types
+│   │   ├── sync-worker-real-jobs.ts # Real job handlers
+│   │   ├── sync-worker-runner.ts # Worker loop runner
+│   │   ├── sync-worker-utils.ts # Shared worker helpers
 │   │   ├── job-executor.ts   # Job executor (wraps sync worker)
 │   │   ├── pid-file.ts       # PID file management
 │   │   └── types.ts          # Daemon types
-│   ├── __tests__/            # Unit tests (942 tests)
+│   ├── __tests__/            # Unit tests (950 tests)
 │   └── __e2e__/              # E2E tests (80 tests)
 │       └── helpers/          # CLI runner, test environment
 ├── scripts/
@@ -133,6 +171,7 @@ telegram-cli/
 │   ├── api-design.md         # API philosophy
 │   ├── auth.md               # Authentication
 │   ├── database-schema.md    # Schema docs
+│   ├── sql.md                # SQL command reference
 │   └── plans/                # Future features
 ├── .github/workflows/
 │   └── ci.yml                # GitHub Actions (4 jobs)
@@ -187,35 +226,3 @@ tg api users.getFullUser --id 123456789
 ---
 
 *See [ROADMAP.md](ROADMAP.md) for full feature roadmap.*
-
----
-
-### Compaction Checkpoint - 2026-02-02 00:31:27
-- Trigger: auto
-- Messages processed: 740
-- Review tasks above and continue from last incomplete item
-
-
----
-
-### Compaction Checkpoint - 2026-02-02 00:48:24
-- Trigger: manual
-- Messages processed: 1675
-- Review tasks above and continue from last incomplete item
-
-
----
-
-### Compaction Checkpoint - 2026-02-02 01:06:31
-- Trigger: manual
-- Messages processed: 531
-- Review tasks above and continue from last incomplete item
-
-
----
-
-### Compaction Checkpoint - 2026-02-02 01:14:43
-- Trigger: auto
-- Messages processed: 921
-- Review tasks above and continue from last incomplete item
-

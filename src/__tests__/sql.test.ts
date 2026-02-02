@@ -3,7 +3,7 @@
  */
 import { describe, expect, it } from 'bun:test'
 
-import { isReadOnlyQuery } from '../commands/sql'
+import { applyQueryLimit, isReadOnlyQuery } from '../commands/sql'
 import {
   getColumnAnnotation,
   getColumnNames,
@@ -128,6 +128,38 @@ describe('SQL Command', () => {
           'WITH deleted AS (DELETE FROM users_cache RETURNING *) SELECT * FROM deleted',
         ),
       ).toBe(false)
+    })
+  })
+
+  describe('applyQueryLimit', () => {
+    it('appends a limit when none is present', () => {
+      expect(applyQueryLimit('SELECT * FROM users_cache', 100)).toBe(
+        'SELECT * FROM users_cache LIMIT 100',
+      )
+    })
+
+    it('does not append when a LIMIT already exists', () => {
+      expect(applyQueryLimit('SELECT * FROM users_cache LIMIT 5', 100)).toBe(
+        'SELECT * FROM users_cache LIMIT 5',
+      )
+    })
+
+    it('detects LIMIT across newlines', () => {
+      expect(applyQueryLimit('SELECT * FROM users_cache\nLIMIT 5', 100)).toBe(
+        'SELECT * FROM users_cache\nLIMIT 5',
+      )
+    })
+
+    it('strips trailing semicolons before appending', () => {
+      expect(applyQueryLimit('SELECT * FROM users_cache;', 10)).toBe(
+        'SELECT * FROM users_cache LIMIT 10',
+      )
+    })
+
+    it('strips trailing semicolons when no limit is applied', () => {
+      expect(applyQueryLimit('SELECT * FROM users_cache;', 0)).toBe(
+        'SELECT * FROM users_cache',
+      )
     })
   })
 

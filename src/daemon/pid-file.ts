@@ -2,7 +2,7 @@
  * PID file management for daemon
  * Prevents multiple daemon instances and enables lifecycle management
  */
-import { existsSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 
 /**
  * Error thrown when PID file operations fail
@@ -49,89 +49,98 @@ function processExists(pid: number): boolean {
   }
 }
 
+function readPidFromFile(path: string): number | null {
+  if (!existsSync(path)) {
+    return null
+  }
+
+  try {
+    const content = readFileSync(path, 'utf-8').trim()
+    const pid = parseInt(content, 10)
+    if (Number.isNaN(pid)) {
+      return null
+    }
+    return pid
+  } catch {
+    return null
+  }
+}
+
+function removePidFile(path: string): void {
+  if (existsSync(path)) {
+    rmSync(path, { force: true })
+  }
+}
+
+function writePidFile(path: string, pid: number): void {
+  try {
+    writeFileSync(path, pid.toString(), { mode: 0o600 })
+  } catch (err) {
+    throw new PidFileError(`Failed to write PID file: ${err}`, 'IO_ERROR')
+  }
+}
+
+class PidFileManager implements PidFile {
+  constructor(private readonly path: string) {}
+
+  acquire(): void {
+    const existingPid = readPidFromFile(this.path)
+    if (existingPid && processExists(existingPid)) {
+      throw new PidFileError(
+        `Daemon already running with PID ${existingPid}`,
+        'ALREADY_RUNNING',
+        existingPid,
+      )
+    }
+
+    if (existingPid || existsSync(this.path)) {
+      removePidFile(this.path)
+    }
+
+    writePidFile(this.path, process.pid)
+  }
+
+  release(): void {
+    removePidFile(this.path)
+  }
+
+  read(): number | null {
+    const pid = readPidFromFile(this.path)
+    if (!pid) {
+      return null
+    }
+    if (!processExists(pid)) {
+      return null
+    }
+    return pid
+  }
+
+  isRunning(): boolean {
+    return this.read() !== null
+  }
+
+  sendSignal(signal: number | NodeJS.Signals): boolean {
+    const pid = this.read()
+    if (pid === null) {
+      return false
+    }
+
+    try {
+      process.kill(pid, signal)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  getPath(): string {
+    return this.path
+  }
+}
+
 /**
  * Create a PID file manager
  */
 export function createPidFile(path: string): PidFile {
-  return {
-    acquire(): void {
-      // Check if PID file exists
-      if (existsSync(path)) {
-        // Using sync read for simplicity in synchronous context
-        const existingPid = parseInt(
-          require('node:fs').readFileSync(path, 'utf-8').trim(),
-          10,
-        )
-
-        if (!Number.isNaN(existingPid) && processExists(existingPid)) {
-          throw new PidFileError(
-            `Daemon already running with PID ${existingPid}`,
-            'ALREADY_RUNNING',
-            existingPid,
-          )
-        }
-
-        // Stale PID file, remove it
-        rmSync(path, { force: true })
-      }
-
-      // Write current PID
-      try {
-        writeFileSync(path, process.pid.toString(), { mode: 0o600 })
-      } catch (err) {
-        throw new PidFileError(`Failed to write PID file: ${err}`, 'IO_ERROR')
-      }
-    },
-
-    release(): void {
-      if (existsSync(path)) {
-        rmSync(path, { force: true })
-      }
-    },
-
-    read(): number | null {
-      if (!existsSync(path)) {
-        return null
-      }
-
-      try {
-        const content = require('node:fs').readFileSync(path, 'utf-8').trim()
-        const pid = parseInt(content, 10)
-
-        if (Number.isNaN(pid)) {
-          return null
-        }
-
-        if (!processExists(pid)) {
-          return null
-        }
-
-        return pid
-      } catch {
-        return null
-      }
-    },
-
-    isRunning(): boolean {
-      return this.read() !== null
-    },
-
-    sendSignal(signal: number | NodeJS.Signals): boolean {
-      const pid = this.read()
-      if (pid === null) {
-        return false
-      }
-
-      try {
-        process.kill(pid, signal)
-        return true
-      } catch {
-        return false
-      }
-    },
-
-    getPath(): string {
-      return path
-    },
-  }
+  return new PidFileManager(path)
 }
