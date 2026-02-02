@@ -114,10 +114,7 @@ class SyncSchedulerImpl implements SyncScheduler {
       const cachedCount = this.messagesCache.countByChatId(chatId)
       if (cachedCount === 0) {
         if (
-          !this.jobsService.hasActiveJobForChat(
-            chatId,
-            SyncJobType.InitialLoad,
-          )
+          !this.jobsService.hasActiveJobForChat(chatId, SyncJobType.InitialLoad)
         ) {
           this.jobsService.create({
             chat_id: chatId,
@@ -137,9 +134,7 @@ class SyncSchedulerImpl implements SyncScheduler {
   }
 
   queueInitialLoad(chatId: number, _messageCount: number): void {
-    if (
-      this.jobsService.hasActiveJobForChat(chatId, SyncJobType.InitialLoad)
-    ) {
+    if (this.jobsService.hasActiveJobForChat(chatId, SyncJobType.InitialLoad)) {
       return
     }
 

@@ -401,9 +401,9 @@ describe('SyncJobsService', () => {
         priority: SyncPriority.High,
       })
 
-      expect(
-        service.hasActiveJobForChat(100, SyncJobType.ForwardCatchup),
-      ).toBe(true)
+      expect(service.hasActiveJobForChat(100, SyncJobType.ForwardCatchup)).toBe(
+        true,
+      )
       expect(
         service.hasActiveJobForChat(100, SyncJobType.BackwardHistory),
       ).toBe(false)
@@ -417,9 +417,9 @@ describe('SyncJobsService', () => {
       })
       service.markRunning(job.id)
 
-      expect(
-        service.hasActiveJobForChat(100, SyncJobType.ForwardCatchup),
-      ).toBe(true)
+      expect(service.hasActiveJobForChat(100, SyncJobType.ForwardCatchup)).toBe(
+        true,
+      )
     })
 
     it('returns false if job is not pending or running', () => {
@@ -431,9 +431,9 @@ describe('SyncJobsService', () => {
       service.markRunning(job.id)
       service.markCompleted(job.id)
 
-      expect(
-        service.hasActiveJobForChat(100, SyncJobType.ForwardCatchup),
-      ).toBe(false)
+      expect(service.hasActiveJobForChat(100, SyncJobType.ForwardCatchup)).toBe(
+        false,
+      )
     })
   })
 
