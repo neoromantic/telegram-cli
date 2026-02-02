@@ -6,9 +6,9 @@ import { createRateLimitsService } from '../db/rate-limits'
 import { createSyncJobsService } from '../db/sync-jobs'
 import { SyncJobType } from '../db/sync-schema'
 import type { DaemonContext } from './daemon-context'
+import { formatError } from './daemon-utils'
 import { DEFAULT_JOB_EXECUTOR_CONFIG } from './job-executor'
 import { createSyncScheduler } from './scheduler'
-import { formatError } from './daemon-utils'
 import { createRealSyncWorker, type RealSyncWorker } from './sync-worker'
 
 export async function initializeScheduler(ctx: DaemonContext): Promise<void> {

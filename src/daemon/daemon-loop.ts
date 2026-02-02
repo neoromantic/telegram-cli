@@ -1,7 +1,7 @@
 import { attemptReconnect, scheduleReconnect } from './daemon-accounts'
 import type { DaemonContext } from './daemon-context'
-import { formatError, getErrorMessage } from './daemon-utils'
 import { processJobs } from './daemon-scheduler'
+import { formatError, getErrorMessage } from './daemon-utils'
 
 const HEALTH_CHECK_INTERVAL_TICKS = 60
 const HEALTH_CHECK_COOLDOWN_MS = 60_000

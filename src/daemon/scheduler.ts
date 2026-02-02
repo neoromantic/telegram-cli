@@ -39,11 +39,11 @@ export interface SyncScheduler {
   /** Atomically claim and start the next pending job (prevents race conditions) */
   claimNextJob(): SyncJobRow | null
   /** Mark job as running */
-  startJob(jobId: number): void
+  startJob(jobId: number): boolean
   /** Mark job as completed */
-  completeJob(jobId: number): void
+  completeJob(jobId: number): boolean
   /** Mark job as failed */
-  failJob(jobId: number, errorMessage: string): void
+  failJob(jobId: number, errorMessage: string): boolean
   /** Update job progress */
   updateProgress(jobId: number, messagesFetched: number, cursor?: number): void
   /** Get scheduler status */
@@ -195,16 +195,16 @@ class SyncSchedulerImpl implements SyncScheduler {
     return this.jobsService.claimNextJob()
   }
 
-  startJob(jobId: number): void {
-    this.jobsService.markRunning(jobId)
+  startJob(jobId: number): boolean {
+    return this.jobsService.markRunning(jobId)
   }
 
-  completeJob(jobId: number): void {
-    this.jobsService.markCompleted(jobId)
+  completeJob(jobId: number): boolean {
+    return this.jobsService.markCompleted(jobId)
   }
 
-  failJob(jobId: number, errorMessage: string): void {
-    this.jobsService.markFailed(jobId, errorMessage)
+  failJob(jobId: number, errorMessage: string): boolean {
+    return this.jobsService.markFailed(jobId, errorMessage)
   }
 
   updateProgress(

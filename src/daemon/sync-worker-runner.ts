@@ -1,5 +1,5 @@
-import type { RealSyncWorker } from './sync-worker-real'
 import { formatError } from './daemon-utils'
+import type { RealSyncWorker } from './sync-worker-real'
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 

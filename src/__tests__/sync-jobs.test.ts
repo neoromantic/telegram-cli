@@ -230,11 +230,22 @@ describe('SyncJobsService', () => {
         priority: SyncPriority.High,
       })
 
-      service.markRunning(job.id)
+      expect(service.markRunning(job.id)).toBe(true)
 
       const updated = service.getById(job.id)
       expect(updated?.status).toBe(SyncJobStatus.Running)
       expect(updated?.started_at).not.toBeNull()
+    })
+
+    it('returns false when job is not pending', () => {
+      const job = service.create({
+        chat_id: 200,
+        job_type: SyncJobType.ForwardCatchup,
+        priority: SyncPriority.High,
+      })
+
+      expect(service.markRunning(job.id)).toBe(true)
+      expect(service.markRunning(job.id)).toBe(false)
     })
   })
 
@@ -245,13 +256,23 @@ describe('SyncJobsService', () => {
         job_type: SyncJobType.ForwardCatchup,
         priority: SyncPriority.High,
       })
-      service.markRunning(job.id)
+      expect(service.markRunning(job.id)).toBe(true)
 
-      service.markCompleted(job.id)
+      expect(service.markCompleted(job.id)).toBe(true)
 
       const updated = service.getById(job.id)
       expect(updated?.status).toBe(SyncJobStatus.Completed)
       expect(updated?.completed_at).not.toBeNull()
+    })
+
+    it('returns false when job is not running', () => {
+      const job = service.create({
+        chat_id: 200,
+        job_type: SyncJobType.ForwardCatchup,
+        priority: SyncPriority.High,
+      })
+
+      expect(service.markCompleted(job.id)).toBe(false)
     })
   })
 
@@ -262,14 +283,24 @@ describe('SyncJobsService', () => {
         job_type: SyncJobType.ForwardCatchup,
         priority: SyncPriority.High,
       })
-      service.markRunning(job.id)
+      expect(service.markRunning(job.id)).toBe(true)
 
-      service.markFailed(job.id, 'Network error')
+      expect(service.markFailed(job.id, 'Network error')).toBe(true)
 
       const updated = service.getById(job.id)
       expect(updated?.status).toBe(SyncJobStatus.Failed)
       expect(updated?.error_message).toBe('Network error')
       expect(updated?.completed_at).not.toBeNull()
+    })
+
+    it('returns false when job is not running', () => {
+      const job = service.create({
+        chat_id: 200,
+        job_type: SyncJobType.ForwardCatchup,
+        priority: SyncPriority.High,
+      })
+
+      expect(service.markFailed(job.id, 'Network error')).toBe(false)
     })
   })
 

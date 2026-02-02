@@ -45,11 +45,11 @@ export interface SyncJobsService {
   /** Get all pending jobs */
   getPendingJobs(): SyncJobRow[]
   /** Mark job as running */
-  markRunning(id: number): void
+  markRunning(id: number): boolean
   /** Mark job as completed */
-  markCompleted(id: number): void
+  markCompleted(id: number): boolean
   /** Mark job as failed */
-  markFailed(id: number, errorMessage: string): void
+  markFailed(id: number, errorMessage: string): boolean
   /** Update job progress */
   updateProgress(id: number, progress: SyncJobProgress): void
   /** Get all running jobs */
@@ -119,19 +119,19 @@ export function createSyncJobsService(db: Database): SyncJobsService {
     markRunning: db.prepare(`
       UPDATE sync_jobs
       SET status = $status, started_at = $now
-      WHERE id = $id
+      WHERE id = $id AND status = $expected_status
     `),
 
     markCompleted: db.prepare(`
       UPDATE sync_jobs
       SET status = $status, completed_at = $now
-      WHERE id = $id
+      WHERE id = $id AND status = $expected_status
     `),
 
     markFailed: db.prepare(`
       UPDATE sync_jobs
       SET status = $status, error_message = $error, completed_at = $now
-      WHERE id = $id
+      WHERE id = $id AND status = $expected_status
     `),
 
     updateProgress: db.prepare(`
@@ -225,29 +225,35 @@ export function createSyncJobsService(db: Database): SyncJobsService {
       return stmts.getPendingJobs.all({ $status: SyncJobStatus.Pending })
     },
 
-    markRunning(id: number): void {
-      stmts.markRunning.run({
+    markRunning(id: number): boolean {
+      const result = stmts.markRunning.run({
         $id: id,
         $status: SyncJobStatus.Running,
+        $expected_status: SyncJobStatus.Pending,
         $now: Date.now(),
       })
+      return result.changes === 1
     },
 
-    markCompleted(id: number): void {
-      stmts.markCompleted.run({
+    markCompleted(id: number): boolean {
+      const result = stmts.markCompleted.run({
         $id: id,
         $status: SyncJobStatus.Completed,
+        $expected_status: SyncJobStatus.Running,
         $now: Date.now(),
       })
+      return result.changes === 1
     },
 
-    markFailed(id: number, errorMessage: string): void {
-      stmts.markFailed.run({
+    markFailed(id: number, errorMessage: string): boolean {
+      const result = stmts.markFailed.run({
         $id: id,
         $status: SyncJobStatus.Failed,
+        $expected_status: SyncJobStatus.Running,
         $error: errorMessage,
         $now: Date.now(),
       })
+      return result.changes === 1
     },
 
     updateProgress(id: number, progress: SyncJobProgress): void {

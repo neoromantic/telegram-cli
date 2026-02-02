@@ -5,7 +5,11 @@ import { createChatSyncStateService } from '../db/chat-sync-state'
 import { createMessagesCache } from '../db/messages-cache'
 import { getDefaultConfig, validateConfig } from '../services/telegram'
 import type { DaemonContext } from './daemon-context'
-import { calculateReconnectDelay, formatError, getErrorMessage } from './daemon-utils'
+import {
+  calculateReconnectDelay,
+  formatError,
+  getErrorMessage,
+} from './daemon-utils'
 import {
   createUpdateHandlers,
   type NewMessageData,
@@ -24,9 +28,7 @@ export async function closeClientSafe(
     await closeFn.call(client)
     ctx.logger.debug(`Closed client (${reason})`)
   } catch (err) {
-    ctx.logger.warn(
-      `Failed to close client (${reason}): ${formatError(err)}`,
-    )
+    ctx.logger.warn(`Failed to close client (${reason}): ${formatError(err)}`)
   }
 }
 
@@ -279,9 +281,7 @@ export async function connectAccount(
     return true
   } catch (err) {
     const errorMessage = getErrorMessage(err)
-    ctx.logger.error(
-      `Failed to connect account ${phone}: ${formatError(err)}`,
-    )
+    ctx.logger.error(`Failed to connect account ${phone}: ${formatError(err)}`)
 
     accountState.status = 'error'
     accountState.lastError = errorMessage

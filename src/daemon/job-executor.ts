@@ -144,7 +144,15 @@ export class JobExecutor {
    * Execute a single job with inter-batch delays
    */
   async executeJob(job: SyncJobRow): Promise<JobExecutionResult> {
-    this.scheduler.startJob(job.id)
+    if (!this.scheduler.startJob(job.id)) {
+      return {
+        success: false,
+        totalMessagesFetched: 0,
+        batchesProcessed: 0,
+        error: `Job ${job.id} is not pending`,
+        hasMoreWork: false,
+      }
+    }
 
     let totalMessagesFetched = 0
     let batchesProcessed = 0
@@ -187,7 +195,15 @@ export class JobExecutor {
 
       // Mark job as completed (or leave it for continuation if hasMoreWork)
       if (!hasMoreWork) {
-        this.scheduler.completeJob(job.id)
+        if (!this.scheduler.completeJob(job.id)) {
+          return {
+            success: false,
+            totalMessagesFetched,
+            batchesProcessed,
+            error: `Job ${job.id} is not running`,
+            hasMoreWork: false,
+          }
+        }
       }
 
       return {

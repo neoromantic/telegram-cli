@@ -6,8 +6,8 @@ import type { Database } from 'bun:sqlite'
 import type { ChatSyncStateService } from '../db/chat-sync-state'
 import type { MessageInput, MessagesCache } from '../db/messages-cache'
 import { determineSyncPolicy, type SyncChatType } from '../db/sync-schema'
-import type { DaemonLogger } from './types'
 import { formatError } from './daemon-utils'
+import type { DaemonLogger } from './types'
 
 /**
  * Context for update processing

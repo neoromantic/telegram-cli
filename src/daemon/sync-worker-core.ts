@@ -376,7 +376,14 @@ async function processJob(
   ctx: SyncWorkerContext,
   job: SyncJobRow,
 ): Promise<JobResult> {
-  ctx.jobsService.markRunning(job.id)
+  const started = ctx.jobsService.markRunning(job.id)
+  if (!started) {
+    return {
+      success: false,
+      messagesFetched: 0,
+      error: `Job ${job.id} is not pending`,
+    }
+  }
 
   try {
     let result: JobResult
@@ -400,20 +407,30 @@ async function processJob(
     }
 
     if (result.success) {
-      ctx.jobsService.markCompleted(job.id)
+      if (!ctx.jobsService.markCompleted(job.id)) {
+        console.warn(`[sync-worker] Failed to mark job ${job.id} completed`)
+      }
     } else if (result.rateLimited) {
-      ctx.jobsService.markFailed(
-        job.id,
-        `Rate limited: wait ${result.waitSeconds}s`,
-      )
+      if (
+        !ctx.jobsService.markFailed(
+          job.id,
+          `Rate limited: wait ${result.waitSeconds}s`,
+        )
+      ) {
+        console.warn(`[sync-worker] Failed to mark job ${job.id} failed`)
+      }
     } else if (result.error) {
-      ctx.jobsService.markFailed(job.id, result.error)
+      if (!ctx.jobsService.markFailed(job.id, result.error)) {
+        console.warn(`[sync-worker] Failed to mark job ${job.id} failed`)
+      }
     }
 
     return result
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : 'Unknown error'
-    ctx.jobsService.markFailed(job.id, errorMessage)
+    if (!ctx.jobsService.markFailed(job.id, errorMessage)) {
+      console.warn(`[sync-worker] Failed to mark job ${job.id} failed`)
+    }
     return {
       success: false,
       messagesFetched: 0,
