@@ -1,55 +1,41 @@
 /**
  * Output utilities tests
  */
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
+
+import type { Mock } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test'
 import { type ErrorCode, ErrorCodes } from '../types'
 import {
   error,
   getExitCode,
   getOutputFormat,
   info,
-  type OutputWriter,
-  resetOutputFormat,
-  resetOutputWriter,
   setOutputFormat,
-  setOutputWriter,
   success,
-  table,
   verbose,
 } from '../utils/output'
-import { snapshotLines } from './helpers/snapshots'
 
 // Set test environment to prevent process.exit
 process.env.BUN_ENV = 'test'
 
 describe('Output Utilities', () => {
-  let logs: string[]
-  let errors: string[]
-  let mockWriter: OutputWriter
+  let logSpy: Mock<typeof console.log>
+  let errorSpy: Mock<typeof console.error>
 
   beforeEach(() => {
-    logs = []
-    errors = []
-    mockWriter = {
-      log: (msg: string) => logs.push(msg),
-      error: (msg: string) => errors.push(msg),
-    }
-    setOutputWriter(mockWriter)
-    resetOutputFormat()
+    logSpy = spyOn(console, 'log').mockImplementation(() => {})
+    errorSpy = spyOn(console, 'error').mockImplementation(() => {})
+    setOutputFormat('json')
   })
 
   afterEach(() => {
-    resetOutputWriter()
-    resetOutputFormat()
+    logSpy.mockRestore()
+    errorSpy.mockRestore()
+    setOutputFormat('json')
     delete process.env.VERBOSE
   })
 
   describe('setOutputFormat / getOutputFormat', () => {
-    it('should default to json format', () => {
-      resetOutputFormat()
-      expect(getOutputFormat()).toBe('json')
-    })
-
     it('should set format to pretty', () => {
       setOutputFormat('pretty')
       expect(getOutputFormat()).toBe('pretty')
@@ -66,8 +52,8 @@ describe('Output Utilities', () => {
       setOutputFormat('json')
       success({ message: 'test' })
 
-      expect(logs).toHaveLength(1)
-      const output = JSON.parse(logs[0] ?? '')
+      expect(logSpy).toHaveBeenCalledTimes(1)
+      const output = JSON.parse(logSpy.mock.calls[0]?.[0] as string)
       expect(output.success).toBe(true)
       expect(output.data).toEqual({ message: 'test' })
     })
@@ -76,8 +62,8 @@ describe('Output Utilities', () => {
       setOutputFormat('pretty')
       success({ message: 'test' })
 
-      expect(logs).toHaveLength(1)
-      const output = JSON.parse(logs[0] ?? '')
+      expect(logSpy).toHaveBeenCalledTimes(1)
+      const output = JSON.parse(logSpy.mock.calls[0]?.[0] as string)
       expect(output.success).toBeUndefined()
       expect(output.message).toBe('test')
     })
@@ -86,7 +72,7 @@ describe('Output Utilities', () => {
       setOutputFormat('quiet')
       success({ message: 'test' })
 
-      expect(logs).toHaveLength(0)
+      expect(logSpy).not.toHaveBeenCalled()
     })
 
     it('should handle complex data', () => {
@@ -98,7 +84,7 @@ describe('Output Utilities', () => {
         total: 2,
       })
 
-      const output = JSON.parse(logs[0] ?? '')
+      const output = JSON.parse(logSpy.mock.calls[0]?.[0] as string)
       expect(output.data.users).toHaveLength(2)
       expect(output.data.total).toBe(2)
     })
@@ -106,14 +92,14 @@ describe('Output Utilities', () => {
     it('should handle null data', () => {
       success(null)
 
-      const output = JSON.parse(logs[0] ?? '')
+      const output = JSON.parse(logSpy.mock.calls[0]?.[0] as string)
       expect(output.data).toBeNull()
     })
 
     it('should handle array data', () => {
       success([1, 2, 3])
 
-      const output = JSON.parse(logs[0] ?? '')
+      const output = JSON.parse(logSpy.mock.calls[0]?.[0] as string)
       expect(output.data).toEqual([1, 2, 3])
     })
   })
@@ -125,9 +111,9 @@ describe('Output Utilities', () => {
       expect(() =>
         error(ErrorCodes.GENERAL_ERROR, 'Something went wrong'),
       ).toThrow('Something went wrong')
-      expect(errors).toHaveLength(1)
+      expect(errorSpy).toHaveBeenCalledTimes(1)
 
-      const output = JSON.parse(errors[0] ?? '')
+      const output = JSON.parse(errorSpy.mock.calls[0]?.[0] as string)
       expect(output.success).toBe(false)
       expect(output.error.code).toBe('GENERAL_ERROR')
       expect(output.error.message).toBe('Something went wrong')
@@ -143,7 +129,7 @@ describe('Output Utilities', () => {
         // Expected
       }
 
-      const output = JSON.parse(errors[0] ?? '')
+      const output = JSON.parse(errorSpy.mock.calls[0]?.[0] as string)
       expect(output.error.details).toEqual({ endpoint: '/test', status: 500 })
     })
 
@@ -151,7 +137,7 @@ describe('Output Utilities', () => {
       setOutputFormat('quiet')
 
       expect(() => error(ErrorCodes.GENERAL_ERROR, 'Test')).toThrow()
-      expect(errors).toHaveLength(0)
+      expect(errorSpy).not.toHaveBeenCalled()
     })
 
     it('should set code and details on thrown error', () => {
@@ -200,23 +186,23 @@ describe('Output Utilities', () => {
       setOutputFormat('json')
       info('Info message')
 
-      expect(errors).toHaveLength(1)
-      expect(errors[0]).toBe('Info message')
+      expect(errorSpy).toHaveBeenCalledTimes(1)
+      expect(errorSpy.mock.calls[0]?.[0]).toBe('Info message')
     })
 
     it('should output to stderr in pretty mode', () => {
       setOutputFormat('pretty')
       info('Info message')
 
-      expect(errors).toHaveLength(1)
-      expect(errors[0]).toBe('Info message')
+      expect(errorSpy).toHaveBeenCalledTimes(1)
+      expect(errorSpy.mock.calls[0]?.[0]).toBe('Info message')
     })
 
     it('should not output in quiet mode', () => {
       setOutputFormat('quiet')
       info('Info message')
 
-      expect(errors).toHaveLength(0)
+      expect(errorSpy).not.toHaveBeenCalled()
     })
   })
 
@@ -225,122 +211,22 @@ describe('Output Utilities', () => {
       delete process.env.VERBOSE
       verbose('Verbose message')
 
-      expect(errors).toHaveLength(0)
+      expect(errorSpy).not.toHaveBeenCalled()
     })
 
     it('should output with prefix when VERBOSE=1', () => {
       process.env.VERBOSE = '1'
       verbose('Verbose message')
 
-      expect(errors).toHaveLength(1)
-      expect(errors[0]).toBe('[verbose] Verbose message')
+      expect(errorSpy).toHaveBeenCalledTimes(1)
+      expect(errorSpy.mock.calls[0]?.[0]).toBe('[verbose] Verbose message')
     })
 
     it('should not output when VERBOSE is other value', () => {
       process.env.VERBOSE = '0'
       verbose('Verbose message')
 
-      expect(errors).toHaveLength(0)
-    })
-  })
-
-  describe('table', () => {
-    it('should output JSON array of objects in json mode', () => {
-      setOutputFormat('json')
-      table(
-        ['Name', 'Age'],
-        [
-          ['Alice', 30],
-          ['Bob', 25],
-        ],
-      )
-
-      const output = JSON.parse(logs[0] ?? '')
-      expect(output.success).toBe(true)
-      expect(output.data).toEqual([
-        { name: 'Alice', age: 30 },
-        { name: 'Bob', age: 25 },
-      ])
-    })
-
-    it('should output formatted table in pretty mode', () => {
-      setOutputFormat('pretty')
-      table(
-        ['Name', 'Age'],
-        [
-          ['Alice', 30],
-          ['Bob', 25],
-        ],
-      )
-
-      expect(logs.length).toBeGreaterThan(0)
-      expect(logs[0]).toContain('Name')
-      expect(logs[0]).toContain('Age')
-    })
-
-    it('should output nothing in quiet mode', () => {
-      setOutputFormat('quiet')
-      table(['Name', 'Age'], [['Alice', 30]])
-
-      expect(logs).toHaveLength(0)
-    })
-
-    it('should handle null/undefined values', () => {
-      setOutputFormat('json')
-      table(
-        ['Name', 'Value'],
-        [
-          ['Test', null],
-          ['Test2', undefined],
-        ],
-      )
-
-      const output = JSON.parse(logs[0] ?? '')
-      expect(output.data[0].value).toBeNull()
-      expect(output.data[1].value).toBeUndefined()
-    })
-
-    it('should handle empty rows', () => {
-      setOutputFormat('json')
-      table(['Name'], [])
-
-      const output = JSON.parse(logs[0] ?? '')
-      expect(output.data).toEqual([])
-    })
-
-    it('should lowercase header keys in JSON output', () => {
-      setOutputFormat('json')
-      table(['FirstName', 'LastName'], [['John', 'Doe']])
-
-      const output = JSON.parse(logs[0] ?? '')
-      expect(output.data[0]).toHaveProperty('firstname')
-      expect(output.data[0]).toHaveProperty('lastname')
-    })
-  })
-
-  describe('output writer', () => {
-    it('should use custom writer', () => {
-      const customLogs: string[] = []
-      setOutputWriter({
-        log: (msg) => customLogs.push(`CUSTOM: ${msg}`),
-        error: () => {},
-      })
-
-      success({ test: true })
-
-      expect(customLogs).toHaveLength(1)
-      expect(customLogs[0]).toContain('CUSTOM:')
-    })
-
-    it('should reset to default writer', () => {
-      setOutputWriter({
-        log: () => {},
-        error: () => {},
-      })
-      resetOutputWriter()
-
-      // Just verify it doesn't throw - actual output goes to console
-      expect(() => success({ test: true })).not.toThrow()
+      expect(errorSpy).not.toHaveBeenCalled()
     })
   })
 
@@ -353,7 +239,7 @@ describe('Output Utilities', () => {
         items: ['alpha', 'beta'],
       })
 
-      expect(snapshotLines(logs)).toMatchInlineSnapshot(`
+      expect(logSpy.mock.calls[0]?.[0]).toMatchInlineSnapshot(`
 "{
   "success": true,
   "data": {

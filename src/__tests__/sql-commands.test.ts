@@ -2,6 +2,7 @@
  * SQL command integration tests
  */
 import type { Database } from 'bun:sqlite'
+import type { Mock } from 'bun:test'
 import {
   afterEach,
   beforeEach,
@@ -14,8 +15,9 @@ import {
 
 import { createTestCacheDatabase } from '../db/schema'
 import { createUsersCache } from '../db/users-cache'
-import { type ErrorCode, ErrorCodes } from '../types'
-import { resetOutputWriter, setOutputWriter } from '../utils/output'
+import type { ErrorCode } from '../types'
+import { ErrorCodes } from '../types'
+import { setOutputFormat } from '../utils/output'
 
 let testCacheDb: Database
 
@@ -24,12 +26,6 @@ type CommandRun = (input: { args: Record<string, unknown> }) => Promise<void>
 mock.module('../db', () => ({
   getCacheDb: () => testCacheDb,
 }))
-
-const outputLogs: string[] = []
-const outputWriter = {
-  log: (message: string) => outputLogs.push(message),
-  error: (message: string) => outputLogs.push(message),
-}
 
 async function expectCommandError(
   run: Promise<unknown>,
@@ -45,11 +41,15 @@ async function expectCommandError(
 }
 
 describe('SQL Commands', () => {
+  let logSpy: Mock<typeof console.log>
+  let errorSpy: Mock<typeof console.error>
+
   beforeEach(() => {
     const { db } = createTestCacheDatabase()
     testCacheDb = db
-    outputLogs.length = 0
-    setOutputWriter(outputWriter)
+    logSpy = spyOn(console, 'log').mockImplementation(() => {})
+    errorSpy = spyOn(console, 'error').mockImplementation(() => {})
+    setOutputFormat('json')
 
     const usersCache = createUsersCache(testCacheDb)
     usersCache.upsert({
@@ -68,7 +68,9 @@ describe('SQL Commands', () => {
   })
 
   afterEach(() => {
-    resetOutputWriter()
+    logSpy.mockRestore()
+    errorSpy.mockRestore()
+    setOutputFormat('json')
     testCacheDb.close()
   })
 
@@ -80,28 +82,27 @@ describe('SQL Commands', () => {
       await run({
         args: {
           query: 'SELECT user_id, username FROM users_cache',
-          format: 'json',
+          output: 'json',
           limit: '1000',
           _: [],
         },
       })
 
-      expect(outputLogs.length).toBeGreaterThan(0)
-      const parsed = JSON.parse(outputLogs[0]!)
+      expect(logSpy).toHaveBeenCalled()
+      const parsed = JSON.parse(logSpy.mock.calls[0]?.[0] as string)
       expect(parsed.success).toBe(true)
       expect(parsed.data.rowCount).toBe(1)
       expect(parsed.data.columns).toEqual(['user_id', 'username'])
     })
 
-    it('prints CSV output when format=csv', async () => {
+    it('prints CSV output when output=csv', async () => {
       const { sqlQueryCommand } = await import('../commands/sql/query')
       const run = sqlQueryCommand.run as CommandRun
-      const logSpy = spyOn(console, 'log').mockImplementation(() => {})
 
       await run({
         args: {
           query: 'SELECT user_id FROM users_cache',
-          format: 'csv',
+          output: 'csv',
           limit: '1000',
           _: [],
         },
@@ -110,8 +111,6 @@ describe('SQL Commands', () => {
       expect(logSpy).toHaveBeenCalled()
       const firstCall = logSpy.mock.calls[0]?.[0] as string
       expect(firstCall).toContain('user_id')
-
-      logSpy.mockRestore()
     })
 
     it('rejects missing query', async () => {
@@ -123,12 +122,12 @@ describe('SQL Commands', () => {
       )
     })
 
-    it('rejects invalid format', async () => {
+    it('rejects invalid output', async () => {
       const { sqlQueryCommand } = await import('../commands/sql/query')
       const run = sqlQueryCommand.run as CommandRun
       await expectCommandError(
         run({
-          args: { query: 'SELECT 1', format: 'xml', limit: '10', _: [] },
+          args: { query: 'SELECT 1', output: 'xml', limit: '10', _: [] },
         }),
         ErrorCodes.INVALID_ARGS,
       )
@@ -139,7 +138,7 @@ describe('SQL Commands', () => {
       const run = sqlQueryCommand.run as CommandRun
       await expectCommandError(
         run({
-          args: { query: 'SELECT 1', format: 'json', limit: '-1', _: [] },
+          args: { query: 'SELECT 1', output: 'json', limit: '-1', _: [] },
         }),
         ErrorCodes.INVALID_ARGS,
       )
@@ -150,7 +149,7 @@ describe('SQL Commands', () => {
       const run = sqlQueryCommand.run as CommandRun
       await expectCommandError(
         run({
-          args: { query: 'DELETE FROM users_cache', format: 'json', _: [] },
+          args: { query: 'DELETE FROM users_cache', output: 'json', _: [] },
         }),
         ErrorCodes.SQL_WRITE_NOT_ALLOWED,
       )
@@ -163,7 +162,7 @@ describe('SQL Commands', () => {
         run({
           args: {
             query: 'SELECT * FORM users_cache',
-            format: 'json',
+            output: 'json',
             _: [],
           },
         }),
@@ -178,7 +177,7 @@ describe('SQL Commands', () => {
         run({
           args: {
             query: 'SELECT * FROM missing_table',
-            format: 'json',
+            output: 'json',
             _: [],
           },
         }),
@@ -198,7 +197,7 @@ describe('SQL Commands', () => {
         args: { table: 'users_cache', format: 'json', _: [] },
       })
 
-      const parsed = JSON.parse(outputLogs[0]!)
+      const parsed = JSON.parse(logSpy.mock.calls[0]?.[0] as string)
       expect(parsed.success).toBe(true)
       expect(parsed.data.table).toBe('users_cache')
       expect(parsed.data.columns.length).toBeGreaterThan(0)
@@ -209,7 +208,6 @@ describe('SQL Commands', () => {
         '../commands/sql/print-schema'
       )
       const run = printSchemaCommand.run as CommandRun
-      const logSpy = spyOn(console, 'log').mockImplementation(() => {})
 
       await run({
         args: { table: 'users_cache', output: 'text', _: [] },
@@ -218,8 +216,6 @@ describe('SQL Commands', () => {
       expect(logSpy).toHaveBeenCalled()
       const firstCall = logSpy.mock.calls[0]?.[0] as string
       expect(firstCall).toContain('users_cache')
-
-      logSpy.mockRestore()
     })
 
     it('prints sql schema for a table', async () => {
@@ -227,7 +223,6 @@ describe('SQL Commands', () => {
         '../commands/sql/print-schema'
       )
       const run = printSchemaCommand.run as CommandRun
-      const logSpy = spyOn(console, 'log').mockImplementation(() => {})
 
       await run({
         args: { table: 'users_cache', output: 'sql', _: [] },
@@ -237,8 +232,6 @@ describe('SQL Commands', () => {
       const firstCall = logSpy.mock.calls[0]?.[0] as string
       expect(firstCall).toContain('CREATE TABLE users_cache')
       expect(firstCall).toContain('-- ')
-
-      logSpy.mockRestore()
     })
 
     it('rejects invalid output format', async () => {
@@ -265,6 +258,83 @@ describe('SQL Commands', () => {
         }),
         ErrorCodes.SQL_TABLE_NOT_FOUND,
       )
+    })
+
+    it('prints JSON schema for all tables when no table specified', async () => {
+      const { printSchemaCommand } = await import(
+        '../commands/sql/print-schema'
+      )
+      const run = printSchemaCommand.run as CommandRun
+
+      await run({
+        args: { output: 'json', _: [] },
+      })
+
+      const parsed = JSON.parse(logSpy.mock.calls[0]?.[0] as string)
+      expect(parsed.success).toBe(true)
+      expect(parsed.data.version).toBeGreaterThan(0)
+      expect(Array.isArray(parsed.data.tables)).toBe(true)
+      expect(parsed.data.tables.length).toBeGreaterThan(0)
+      // Verify table structure
+      const firstTable = parsed.data.tables[0]
+      expect(firstTable).toHaveProperty('name')
+      expect(firstTable).toHaveProperty('description')
+      expect(firstTable).toHaveProperty('primaryKey')
+      expect(firstTable).toHaveProperty('columnCount')
+    })
+
+    it('prints text schema for all tables with separators', async () => {
+      const { printSchemaCommand } = await import(
+        '../commands/sql/print-schema'
+      )
+      const run = printSchemaCommand.run as CommandRun
+
+      await run({
+        args: { output: 'text', _: [] },
+      })
+
+      // Should be called multiple times (once per table + separator lines)
+      expect(logSpy.mock.calls.length).toBeGreaterThan(2)
+
+      // Check that separator lines are present (=.repeat(80))
+      const calls = logSpy.mock.calls.map((c) => c[0] as string)
+      const separatorCalls = calls.filter(
+        (c) => typeof c === 'string' && c.includes('='.repeat(80)),
+      )
+      expect(separatorCalls.length).toBeGreaterThan(0)
+
+      // Check that table names are present
+      const hasUsersCache = calls.some(
+        (c) => typeof c === 'string' && c.includes('users_cache'),
+      )
+      expect(hasUsersCache).toBe(true)
+    })
+
+    it('prints SQL schema for all tables with separators', async () => {
+      const { printSchemaCommand } = await import(
+        '../commands/sql/print-schema'
+      )
+      const run = printSchemaCommand.run as CommandRun
+
+      await run({
+        args: { output: 'sql', _: [] },
+      })
+
+      // Should be called multiple times (once per table + separator lines)
+      expect(logSpy.mock.calls.length).toBeGreaterThan(2)
+
+      // Check that SQL separator lines are present (-- .repeat(27))
+      const calls = logSpy.mock.calls.map((c) => c[0] as string)
+      const separatorCalls = calls.filter(
+        (c) => typeof c === 'string' && c.includes('-- '.repeat(27)),
+      )
+      expect(separatorCalls.length).toBeGreaterThan(0)
+
+      // Check that CREATE TABLE statements are present
+      const createTableCalls = calls.filter(
+        (c) => typeof c === 'string' && c.includes('CREATE TABLE'),
+      )
+      expect(createTableCalls.length).toBeGreaterThan(0)
     })
   })
 })

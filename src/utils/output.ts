@@ -7,39 +7,6 @@ import type { ErrorCode, Output, OutputFormat } from '../types'
 let currentFormat: OutputFormat = 'json'
 
 /**
- * Output writer interface for dependency injection (testing)
- */
-export interface OutputWriter {
-  log(message: string): void
-  error(message: string): void
-}
-
-/**
- * Default output writer using console
- */
-export const defaultWriter: OutputWriter = {
-  log: (message: string) => console.log(message),
-  error: (message: string) => console.error(message),
-}
-
-/** Current output writer */
-let writer: OutputWriter = defaultWriter
-
-/**
- * Set the output writer (for testing)
- */
-export function setOutputWriter(newWriter: OutputWriter): void {
-  writer = newWriter
-}
-
-/**
- * Reset output writer to default
- */
-export function resetOutputWriter(): void {
-  writer = defaultWriter
-}
-
-/**
  * Set the output format
  */
 export function setOutputFormat(format: OutputFormat): void {
@@ -54,13 +21,6 @@ export function getOutputFormat(): OutputFormat {
 }
 
 /**
- * Reset output format to default
- */
-export function resetOutputFormat(): void {
-  currentFormat = 'json'
-}
-
-/**
  * Output success result
  * Note: In production mode, this exits the process to close any active connections.
  * In test mode, this just logs and returns.
@@ -70,10 +30,10 @@ export function success<T>(data: T): void {
 
   switch (currentFormat) {
     case 'json':
-      writer.log(JSON.stringify(result, null, 2))
+      console.log(JSON.stringify(result, null, 2))
       break
     case 'pretty':
-      writer.log(JSON.stringify(data, null, 2))
+      console.log(JSON.stringify(data, null, 2))
       break
     case 'quiet':
       // No output for quiet mode
@@ -102,7 +62,7 @@ export function error(
   }
 
   if (currentFormat !== 'quiet') {
-    writer.error(JSON.stringify(result, null, 2))
+    console.error(JSON.stringify(result, null, 2))
   }
 
   // In test mode, throw instead of exiting
@@ -151,56 +111,11 @@ export function getExitCode(code: ErrorCode): number {
 }
 
 /**
- * Format a table for pretty output
- */
-export function table(
-  headers: string[],
-  rows: (string | number | null | undefined)[][],
-): void {
-  if (currentFormat === 'quiet') return
-
-  if (currentFormat === 'json') {
-    // Convert to array of objects
-    const data = rows.map((row) => {
-      const obj: Record<string, string | number | null | undefined> = {}
-      headers.forEach((h, i) => {
-        obj[h.toLowerCase()] = row[i]
-      })
-      return obj
-    })
-    writer.log(JSON.stringify({ success: true, data }, null, 2))
-    return
-  }
-
-  // Pretty table output
-  const colWidths = headers.map((h, i) => {
-    const maxDataWidth = Math.max(...rows.map((r) => String(r[i] ?? '').length))
-    return Math.max(h.length, maxDataWidth)
-  })
-
-  const separator = '─'
-  const headerLine = headers
-    .map((h, i) => h.padEnd(colWidths[i] ?? 0))
-    .join(' │ ')
-  const separatorLine = colWidths.map((w) => separator.repeat(w)).join('─┼─')
-
-  writer.log(headerLine)
-  writer.log(separatorLine)
-
-  for (const row of rows) {
-    const line = row
-      .map((cell, i) => String(cell ?? '').padEnd(colWidths[i] ?? 0))
-      .join(' │ ')
-    writer.log(line)
-  }
-}
-
-/**
  * Log verbose output (only in verbose mode)
  */
 export function verbose(message: string): void {
   if (process.env.VERBOSE === '1') {
-    writer.error(`[verbose] ${message}`)
+    console.error(`[verbose] ${message}`)
   }
 }
 
@@ -209,6 +124,6 @@ export function verbose(message: string): void {
  */
 export function info(message: string): void {
   if (currentFormat !== 'quiet') {
-    writer.error(message)
+    console.error(message)
   }
 }
