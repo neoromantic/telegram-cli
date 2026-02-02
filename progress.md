@@ -2,7 +2,7 @@
 
 ## Current Status: Phase 5 Complete - Sync System Implementation
 
-**Last updated**: 2026-02-02 (coverage-focused SQL + sync worker tests)
+**Last updated**: 2026-02-02 (daemon + runner coverage refresh)
 
 ## What's Working
 
@@ -29,34 +29,27 @@
 | **Real-time Sync** | ✅ Complete | mtcute event wiring, update processing, cursor management |
 | **Sync Workers** | ✅ Complete | ForwardCatchup, BackwardHistory, InitialLoad jobs |
 | **Job Executor** | ✅ Complete | Rate-limited job execution with flood wait handling |
-| **Unit Tests** | ✅ Complete | 950 tests in `src/__tests__/` |
-| **E2E Tests** | ✅ Complete | 80 tests in `src/__e2e__/` |
+| **Unit Tests** | ✅ Complete | 1029 tests in `src/__tests__/` |
+| **E2E Tests** | ✅ Complete | 81 tests in `src/__e2e__/` |
 | **CI Pipeline** | ✅ Complete | lint, typecheck, test, build-test |
 | **Build System** | ✅ Complete | Native binary compilation, cross-platform |
 
 ### 📊 Test Coverage
 
-- **1072 total tests** (992 unit + 80 E2E)
-- **~76% line coverage**
-- **~73% function coverage**
+- **1110 total tests** (1029 unit + 81 E2E)
+- **~90.88% line coverage**
+- **~88.80% function coverage**
 
 ### ✅ Verification (2026-02-02)
 
-- `bun run lint`
 - `bun run typecheck`
 - `bun run test`
 - `bun run test:e2e`
-- `bun run test:build`
-- `bun run test:install`
-- `qlty smells`
+- `bun run test:coverage`
 
 ### ✅ Additional Verification (2026-02-02)
 
-- `bun run typecheck`
-- `bun test src/__tests__/sync-jobs.test.ts src/__tests__/sync-worker-real-helpers.test.ts src/__tests__/update-handlers.test.ts`
-- `bun test src/__e2e__/commands.e2e.test.ts`
-- `qlty smells`
-- `bun run test:coverage`
+- No additional commands run in this pass.
 
 ### 🗄️ Database Layer (New)
 
@@ -166,8 +159,8 @@ telegram-cli/
 │   │   ├── job-executor.ts   # Job executor (wraps sync worker)
 │   │   ├── pid-file.ts       # PID file management
 │   │   └── types.ts          # Daemon types
-│   ├── __tests__/            # Unit tests (950 tests)
-│   └── __e2e__/              # E2E tests (80 tests)
+│   ├── __tests__/            # Unit tests (1029 tests)
+│   └── __e2e__/              # E2E tests (81 tests)
 │       └── helpers/          # CLI runner, test environment
 ├── scripts/
 │   ├── build-all.ts          # Cross-platform builds

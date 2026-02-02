@@ -12,13 +12,49 @@ A complete Telegram CLI client for developers and AI agents. Installable via `bu
 
 → [Full Architecture](docs/plans/architecture.md)
 
+## Plans Index
+
+The canonical plan index lives in `docs/plans/README.md`. The table below mirrors it for quick navigation.
+
+### Core Architecture
+
+| Document | Description | Status |
+|----------|-------------|--------|
+| [architecture.md](docs/plans/architecture.md) | Full system design, CLI/Daemon modes, data flow | **Implemented** |
+| [daemon.md](docs/plans/daemon.md) | Background sync process, lifecycle, multi-account | **Implemented** |
+| [sync-strategy.md](docs/plans/sync-strategy.md) | Dual cursors, priorities, real-time + backfill | **Implemented** |
+
+### Features
+
+| Document | Description | Status |
+|----------|-------------|--------|
+| [cli-commands.md](docs/plans/cli-commands.md) | CLI commands: auth, accounts, contacts, chats, send | **Implemented** |
+| [contacts.md](docs/plans/contacts.md) | Contact management with caching | **Implemented** |
+| [multi-account.md](docs/plans/multi-account.md) | Per-account storage, labels | Partial |
+| [rate-limiting.md](docs/plans/rate-limiting.md) | FLOOD_WAIT handling, `tg status` | **Implemented** |
+| [ai-integration.md](docs/plans/ai-integration.md) | Skills, Claude Code, self-install | Planning |
+| [configuration.md](docs/plans/configuration.md) | config.json, env vars, defaults | Planning |
+| [build-distribution.md](docs/plans/build-distribution.md) | Publishing, releases, homebrew | **Implemented** |
+| [testing.md](docs/plans/testing.md) | Unit + E2E tests | **Implemented** |
+| [sql.md](docs/sql.md) | SQL command (read-only cache access) | **Implemented** |
+| [real-time.md](docs/plans/real-time.md) | Real-time event handlers | **Implemented** |
+
+### Future Features
+
+| Document | Description | Status |
+|----------|-------------|--------|
+| [search.md](docs/plans/search.md) | FTS5 full-text search | Planning |
+| [groups.md](docs/plans/groups.md) | Group operations | Planning |
+| [channel-tags.md](docs/plans/channel-tags.md) | Channel tagging system | Planning |
+| [core-infrastructure.md](docs/plans/core-infrastructure.md) | Store/config patterns | Partial |
+
 ## v0.1.0 — Foundation
 
 **Goal:** Working CLI with daemon architecture, contact sync, basic messaging.
 
 ### Phase 1: Code Quality
 - [x] Set up Biome for linting
-- [x] Set up pre-commit hooks (lint, typecheck, test)
+- [x] Set up pre-commit hooks (lint:fix, typecheck)
 - [x] Refactor current implementation
 - [x] Improve `--help` outputs
 - [x] Add `--verbose` / `--quiet` flags
@@ -26,7 +62,7 @@ A complete Telegram CLI client for developers and AI agents. Installable via `bu
 ### Phase 2: Daemon
 - [x] Implement `tg daemon start/stop/status`
 - [x] PID file management
-- [ ] Multi-account connections (max 5)
+- [x] Multi-account connections (soft limit; enforce max 5 planned)
 - [x] Real-time update handling
 
 → [Daemon Plan](docs/plans/daemon.md)
@@ -49,7 +85,7 @@ A complete Telegram CLI client for developers and AI agents. Installable via `bu
 - [x] Generic cache service with staleness checking
 - [x] Users cache service (UsersCache)
 - [x] Chats cache service (ChatsCache)
-- [x] Comprehensive tests (950 unit tests total)
+- [x] Comprehensive tests (see progress.md for current counts)
 
 → [Database Schema](docs/database-schema.md)
 
@@ -63,8 +99,8 @@ A complete Telegram CLI client for developers and AI agents. Installable via `bu
 → [CLI Commands](docs/plans/cli-commands.md)
 
 ### Phase 6: Multi-Account
-- [x] Account add/remove/switch
-- [x] Account identification (ID, @username, label)
+- [x] Account add/remove/switch (add via `auth login`)
+- [ ] Account identification by username/label (ID only today)
 - [ ] Per-account storage
 
 → [Multi-Account](docs/plans/multi-account.md)
@@ -77,14 +113,14 @@ A complete Telegram CLI client for developers and AI agents. Installable via `bu
 → [AI Integration](docs/plans/ai-integration.md)
 
 ### Phase 8: Testing & Docs
-- [x] Unit testing setup (950 unit tests)
+- [x] Unit testing setup (1029 unit tests)
 - [x] GitHub Actions CI (lint, typecheck, test, build-test)
-- [x] E2E testing setup (80 E2E tests)
+- [x] E2E testing setup (81 E2E tests)
   - [x] CLI execution helper (`Bun.spawn`)
   - [x] Test isolation via `TELEGRAM_CLI_DATA_DIR`
   - [x] Help/format/accounts/exit-code tests
 - [x] Build & distribution scripts
-- **Total: 1072 tests (992 unit + 80 E2E), ~76% line coverage**
+- **Total:** See `progress.md` for latest counts and coverage
 - [ ] Snapshot testing setup
 - [ ] Mock HTTP layer
 - [ ] Integration test suite with TELEGRAM_TEST_ACCOUNT env var
@@ -149,7 +185,9 @@ The following 27 issues have been resolved:
 - Delete events without chat IDs now resolve via cache lookup; ambiguous IDs remain skipped (see #28).
 - Full verification suite run (lint, typecheck, unit, E2E, build, install, qlty smells).
 
-### P0: Critical Issues (Fix Before Production)
+### P0: Critical Issues (Resolved 2026-02-02)
+
+All items below are resolved. Active issues are tracked in P1–P3.
 
 #### 1. ✅ FIXED - Delete Events Ignored for DMs and Groups
 **Location:** `src/daemon/daemon.ts:215-225`
@@ -583,19 +621,12 @@ The daemon has **NO contact synchronization**:
 
 ### 📊 Test Coverage Gaps
 
-**85 missing test scenarios identified:**
+Coverage improved to ~90.88% lines / ~88.80% functions (see `progress.md`).
 
-| Category | Count | Examples |
-|----------|-------|----------|
-| Untested Edge Cases | 32 | Empty arrays, null cursors, duplicate IDs |
-| Missing Error Scenarios | 10 | Database failures, partial batch errors |
-| Missing Integration Tests | 12 | Full sync cycle, scheduler + worker |
-| Untested Code Paths | 15 | `createRealSyncWorker` |
-| Missing Boundary Tests | 16 | Message ID=0, negative chat IDs, MAX_SAFE_INTEGER |
-
-**Critical untested code:**
-- `createRealSyncWorker()` - zero tests
-- `createSyncWorkerRunner()` - zero tests
+**Remaining gaps include:**
+- `createRealSyncWorker()` paths (still low coverage)
+- Auth command flows and CLI auth error handling
+- Daemon account connect/reconnect branches
 
 ---
 
@@ -604,7 +635,7 @@ The daemon has **NO contact synchronization**:
 | File | Issue | Status |
 |------|-------|--------|
 | `CLAUDE.md` | Missing 9 daemon/db files from file structure | ✅ Fixed |
-| `progress.md` | Test count discrepancy | ✅ Fixed (now 1033 tests) |
+| `progress.md` | Test count discrepancy | ✅ Fixed (now 1110 tests) |
 | `docs/plans/sync-strategy.md` | Implementation phase checkboxes outdated | ✅ Fixed |
 
 **Missing from CLAUDE.md file structure:**
