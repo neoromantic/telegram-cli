@@ -141,4 +141,78 @@ describe('MessagesSearch', () => {
     expect(includeDeleted).toHaveLength(2)
     expect(includeDeleted.map((row) => row.message_id).sort()).toEqual([1, 3])
   })
+
+  it('filters by chatId (numeric)', () => {
+    seedBaseData()
+
+    const search = createMessagesSearch(db)
+
+    // Filter by chat_id -100 (Team Chat)
+    const results = search.search('hello', { chatId: -100 })
+
+    expect(results).toHaveLength(1)
+    expect(results[0]!.chat_id).toBe(-100)
+    expect(results[0]!.message_id).toBe(1)
+    expect(results[0]!.text).toBe('hello team')
+
+    // Filter by chat_id -200 (Random)
+    const results2 = search.search('hello', { chatId: -200 })
+
+    expect(results2).toHaveLength(1)
+    expect(results2[0]!.chat_id).toBe(-200)
+    expect(results2[0]!.message_id).toBe(2)
+    expect(results2[0]!.text).toBe('hello random')
+  })
+
+  it('filters by senderId (numeric)', () => {
+    seedBaseData()
+
+    const search = createMessagesSearch(db)
+
+    // Filter by from_id 10 (Alice)
+    const results = search.search('hello', { senderId: 10 })
+
+    expect(results).toHaveLength(1)
+    expect(results[0]!.from_id).toBe(10)
+    expect(results[0]!.message_id).toBe(1)
+    expect(results[0]!.sender_username).toBe('alice')
+
+    // Filter by from_id 11 (Bob) - excludes deleted by default
+    const results2 = search.search('hello', { senderId: 11 })
+
+    expect(results2).toHaveLength(1)
+    expect(results2[0]!.from_id).toBe(11)
+    expect(results2[0]!.message_id).toBe(2)
+    expect(results2[0]!.sender_username).toBe('bob')
+  })
+
+  it('combines chatId and senderId filters', () => {
+    seedBaseData()
+
+    const search = createMessagesSearch(db)
+
+    // Both chatId and senderId matching (Alice in Team Chat)
+    const results = search.search('hello', { chatId: -100, senderId: 10 })
+
+    expect(results).toHaveLength(1)
+    expect(results[0]!.chat_id).toBe(-100)
+    expect(results[0]!.from_id).toBe(10)
+    expect(results[0]!.message_id).toBe(1)
+
+    // chatId matches but senderId doesn't match any non-deleted messages
+    const results2 = search.search('hello', { chatId: -100, senderId: 11 })
+
+    expect(results2).toHaveLength(0)
+
+    // Include deleted to find Bob's message in Team Chat
+    const results3 = search.search('hello', {
+      chatId: -100,
+      senderId: 11,
+      includeDeleted: true,
+    })
+
+    expect(results3).toHaveLength(1)
+    expect(results3[0]!.message_id).toBe(3)
+    expect(results3[0]!.is_deleted).toBe(1)
+  })
 })
