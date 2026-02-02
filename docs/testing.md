@@ -8,6 +8,7 @@ This document covers the implemented testing infrastructure for telegram-cli.
 |------|----------|---------|
 | Unit Tests | `src/__tests__/*.test.ts` | Fast, isolated component tests |
 | E2E Tests | `src/__e2e__/*.e2e.test.ts` | CLI execution + exit code behavior |
+| Integration Tests | `src/__integration__/*.integration.test.ts` | Real Telegram API validation (optional) |
 
 > For current test counts and coverage, see `progress.md`.
 
@@ -19,6 +20,9 @@ bun run test
 
 # E2E tests only
 bun run test:e2e
+
+# Integration tests only (real API, optional)
+bun run test:integration
 
 # All tests (unit + E2E)
 bun run test:all
@@ -133,6 +137,48 @@ await runCli(['accounts', 'list'], env.getCliOptions())
 
 env.cleanup()
 ```
+
+## Integration Tests (Real API)
+
+Integration tests validate real Telegram API flows using a pre-authenticated
+session. Tests are skipped automatically unless all required environment
+variables are set.
+Integration tests are not run in CI to avoid credentials and rate limits.
+
+### Required Environment Variables
+
+- `TELEGRAM_API_ID`
+- `TELEGRAM_API_HASH`
+- `TELEGRAM_TEST_ACCOUNT` (phone number in international format)
+- `TELEGRAM_TEST_SESSION_PATH` (or `TELEGRAM_TEST_SESSION`)
+
+### Optional Environment Variables
+
+- `TELEGRAM_TEST_RECIPIENT` (defaults to your username if available, otherwise
+  `TELEGRAM_TEST_ACCOUNT`)
+
+### Run Integration Tests
+
+```bash
+bun run test:integration
+```
+
+### Record/Replay Fixtures (Offline Mode)
+
+To run integration tests deterministically without network access, you can
+record and replay API fixtures.
+
+```bash
+# Record fixtures
+TELEGRAM_API_RECORD=1 bun run test:integration
+
+# Replay fixtures (no network)
+TELEGRAM_API_REPLAY=1 bun run test:integration
+```
+
+By default fixtures are stored under:
+`$TELEGRAM_CLI_DATA_DIR/fixtures/telegram`. Override with
+`TELEGRAM_API_FIXTURES_DIR`.
 
 ## CI/CD
 
