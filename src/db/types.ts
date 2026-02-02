@@ -212,6 +212,8 @@ export type MessageType =
   | 'venue'
   | 'game'
   | 'invoice'
+  | 'webpage'
+  | 'dice'
   | 'service'
   | 'unknown'
 

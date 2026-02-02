@@ -17,6 +17,47 @@ import {
 } from './handlers'
 import type { AccountConnectionState, AccountEventHandlers } from './types'
 
+const MEDIA_TYPE_MAP: Record<string, string> = {
+  photo: 'photo',
+  video: 'video',
+  document: 'document',
+  sticker: 'sticker',
+  voice: 'voice',
+  audio: 'audio',
+  poll: 'poll',
+  contact: 'contact',
+  location: 'location',
+  live_location: 'location',
+  venue: 'venue',
+  game: 'game',
+  invoice: 'invoice',
+  webpage: 'webpage',
+  dice: 'dice',
+}
+
+function resolveRealtimeMessageType(msg: {
+  isService?: boolean
+  media?: { type?: string } | null
+}): { messageType: string; hasMedia: boolean } {
+  if (msg.isService) {
+    return { messageType: 'service', hasMedia: false }
+  }
+
+  if (!msg.media) {
+    return { messageType: 'text', hasMedia: false }
+  }
+
+  const mediaType = msg.media.type
+  if (!mediaType) {
+    return { messageType: 'unknown', hasMedia: true }
+  }
+
+  return {
+    messageType: MEDIA_TYPE_MAP[mediaType] ?? 'unknown',
+    hasMedia: true,
+  }
+}
+
 export async function closeClientSafe(
   ctx: DaemonContext,
   client: TelegramClient,
@@ -73,6 +114,7 @@ export function setupEventHandlers(
   const eventHandlers: AccountEventHandlers = {
     onNewMessage: (msg) => {
       const ctxLocal = createContext()
+      const { messageType, hasMedia } = resolveRealtimeMessageType(msg)
       const data: NewMessageData = {
         chatId: msg.chat.id,
         messageId: msg.id,
@@ -81,8 +123,8 @@ export function setupEventHandlers(
         date: msg.date.getTime() / 1000,
         isOutgoing: msg.isOutgoing,
         replyToId: msg.replyToMessage?.id ?? undefined,
-        messageType: msg.media ? 'media' : 'text',
-        hasMedia: !!msg.media,
+        messageType,
+        hasMedia,
       }
 
       updateHandlers.handleNewMessage(ctxLocal, data).catch((err) => {

@@ -141,7 +141,7 @@ describe('determineMessageType', () => {
     expect(determineMessageType(msg)).toBe('sticker')
   })
 
-  it('returns "text" for web page messages', () => {
+  it('returns "webpage" for web page messages', () => {
     const msg: RawMessage = {
       _: 'message',
       id: 1,
@@ -150,7 +150,7 @@ describe('determineMessageType', () => {
       date: Date.now(),
       media: { _: 'messageMediaWebPage' },
     }
-    expect(determineMessageType(msg)).toBe('text')
+    expect(determineMessageType(msg)).toBe('webpage')
   })
 
   it('returns "location" for geo messages', () => {

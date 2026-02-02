@@ -95,7 +95,7 @@ tg daemon status             # Shows daemon state, connected accounts, sync prog
 - Routes to appropriate handlers based on update type
 
 #### 3. Update Handlers
-- **MessagesHandler**: New messages, edited messages, deleted messages
+- **MessagesHandler**: New messages, edited messages, deleted messages (service messages are tagged as `service`)
 - **ContactsHandler**: Contact additions, removals, status changes
 - **ChatsHandler**: Chat metadata updates, participant changes
 - **UserHandler**: User info updates, online status

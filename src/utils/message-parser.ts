@@ -149,7 +149,7 @@ export function determineMessageType(message: RawMessage): string {
       messageMediaContact: 'contact',
       messageMediaPoll: 'poll',
       messageMediaDice: 'dice',
-      messageMediaWebPage: 'text',
+      messageMediaWebPage: 'webpage',
     }
 
     messageType = mediaMap[mediaType] ?? 'unknown'
