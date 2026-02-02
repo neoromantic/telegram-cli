@@ -1,0 +1,426 @@
+/**
+ * Additional tests for daemon account connection + event wiring
+ */
+import { Database } from 'bun:sqlite'
+import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test'
+import type { DeleteMessageUpdate, Message, TelegramClient } from '@mtcute/bun'
+import {
+  createDaemonRuntime,
+  type DaemonContext,
+} from '../daemon/daemon-context'
+import type { AccountConnectionState } from '../daemon/types'
+import type { AccountsDbInterface } from '../db'
+import { createChatSyncStateService } from '../db/chat-sync-state'
+import { createMessagesCache } from '../db/messages-cache'
+import { initCacheSchema } from '../db/schema'
+import { initSyncSchema } from '../db/sync-schema'
+import type { Account } from '../types'
+
+type AccountCreateInput = Parameters<AccountsDbInterface['create']>[0]
+type AccountUpdateInput = Parameters<AccountsDbInterface['update']>[1]
+type AccountSeed = Pick<Account, 'id' | 'phone'> & { user_id?: number | null }
+type MessageLike = {
+  id: number
+  chat: { id: number; type: string; chatType?: string }
+  sender?: { id: number } | null
+  text: string
+  date: Date
+  isOutgoing: boolean
+  media?: { type: string } | null
+  replyToMessage?: { id: number } | null
+  raw?: {
+    fwdFrom?: {
+      _: string
+      fromId?: { _: string; userId?: number }
+      date?: number
+    }
+  }
+  editDate?: Date | null
+}
+type DeleteMessageUpdateLike = {
+  channelId: number | null
+  messageIds: number[]
+}
+
+class MockEvent<TArgs extends unknown[]> {
+  handlers: Array<(...args: TArgs) => void> = []
+  add = mock((handler: (...args: TArgs) => void) => {
+    this.handlers.push(handler)
+  })
+  remove = mock((handler: (...args: TArgs) => void) => {
+    this.handlers = this.handlers.filter((entry) => entry !== handler)
+  })
+}
+
+let testCacheDb: Database
+
+// Mutable client behavior
+let nextGetMe = { id: 555, firstName: 'Test', lastName: 'User' }
+let startError: Error | null = null
+let getMeError: Error | null = null
+
+const createdClients: MockTelegramClient[] = []
+
+class MockTelegramClient {
+  options: Record<string, unknown>
+  onNewMessage = new MockEvent<[Message]>()
+  onEditMessage = new MockEvent<[Message]>()
+  onDeleteMessage = new MockEvent<[DeleteMessageUpdate]>()
+
+  start = mock(async (_opts?: Parameters<TelegramClient['start']>[0]) => {
+    if (startError) throw startError
+    return {
+      id: nextGetMe.id,
+      firstName: nextGetMe.firstName,
+    } as Awaited<ReturnType<TelegramClient['start']>>
+  })
+  getMe = mock(async () => {
+    if (getMeError) throw getMeError
+    return nextGetMe as Awaited<ReturnType<TelegramClient['getMe']>>
+  })
+  startUpdatesLoop = mock(
+    async () =>
+      undefined as Awaited<ReturnType<TelegramClient['startUpdatesLoop']>>,
+  )
+  close = mock(async () => {})
+
+  constructor(options: Record<string, unknown>) {
+    this.options = options
+    createdClients.push(this)
+  }
+}
+
+const createClient = (): TelegramClient =>
+  new MockTelegramClient({}) as unknown as TelegramClient
+
+const asMessage = (input: MessageLike): Message => input as Message
+const asDeleteUpdate = (input: DeleteMessageUpdateLike): DeleteMessageUpdate =>
+  input as DeleteMessageUpdate
+
+mock.module('@mtcute/bun', () => ({
+  TelegramClient: MockTelegramClient,
+}))
+
+mock.module('../db', () => ({
+  getCacheDb: () => testCacheDb,
+}))
+
+function createLogger() {
+  return {
+    info: mock(() => {}),
+    debug: mock(() => {}),
+    warn: mock(() => {}),
+    error: mock(() => {}),
+  }
+}
+
+function createAccountsDb(seed: AccountSeed[]): AccountsDbInterface {
+  const accounts = new Map<number, Account>()
+  let activeId: number | null = null
+
+  for (const acc of seed) {
+    accounts.set(acc.id, {
+      id: acc.id,
+      phone: acc.phone,
+      user_id: acc.user_id ?? null,
+      name: null,
+      username: null,
+      label: null,
+      session_data: '',
+      is_active: 0,
+      created_at: '',
+      updated_at: '',
+    })
+  }
+
+  return {
+    getAll: () => Array.from(accounts.values()),
+    getById: (id: number) => accounts.get(id) ?? null,
+    getByPhone: (phone: string) =>
+      Array.from(accounts.values()).find((acc) => acc.phone === phone) ?? null,
+    getByUserId: (userId: number) =>
+      Array.from(accounts.values()).find((acc) => acc.user_id === userId) ??
+      null,
+    getByUsername: (username: string) =>
+      Array.from(accounts.values()).find((acc) => acc.username === username) ??
+      null,
+    getAllByLabel: (label: string) =>
+      Array.from(accounts.values()).filter((acc) => acc.label === label),
+    getActive: () => (activeId ? (accounts.get(activeId) ?? null) : null),
+    create: (_data: AccountCreateInput) => {
+      throw new Error('not used')
+    },
+    update: mock((id: number, data: AccountUpdateInput) => {
+      const current = accounts.get(id)
+      if (!current) return null
+      const updated = {
+        ...current,
+        phone: data.phone ?? current.phone,
+        user_id: data.user_id !== undefined ? data.user_id : current.user_id,
+        name: data.name ?? current.name,
+        username: data.username ?? current.username,
+        label: data.label ?? current.label,
+        session_data: data.session_data ?? current.session_data,
+      }
+      accounts.set(id, updated)
+      return updated
+    }),
+    updateSession: mock((_id: number, _session: string) => {}),
+    setActive: mock((id: number) => {
+      activeId = id
+      for (const acc of accounts.values()) {
+        acc.is_active = acc.id === id ? 1 : 0
+      }
+    }),
+    delete: mock((id: number) => {
+      return accounts.delete(id)
+    }),
+    count: () => accounts.size,
+  }
+}
+
+function createContext(accountsDb: AccountsDbInterface): DaemonContext {
+  return {
+    dataDir: '/tmp/tgcli',
+    pidPath: '/tmp/tgcli.pid',
+    verbosity: 'normal',
+    reconnectConfig: {
+      initialDelayMs: 1000,
+      maxDelayMs: 4000,
+      maxAttempts: 2,
+      backoffMultiplier: 2,
+    },
+    shutdownTimeoutMs: 1_000_000,
+    logger: createLogger(),
+    pidFile: {
+      acquire: () => {},
+      release: () => {},
+      read: () => null,
+      isRunning: () => false,
+      sendSignal: () => false,
+      getPath: () => '/tmp/tgcli.pid',
+    },
+    state: {
+      running: true,
+      accounts: new Map(),
+      shutdownRequested: false,
+    },
+    accountsDb,
+    runtime: createDaemonRuntime(),
+  }
+}
+
+describe('daemon-accounts: connection + event wiring', () => {
+  beforeEach(() => {
+    testCacheDb = new Database(':memory:')
+    initCacheSchema(testCacheDb)
+    initSyncSchema(testCacheDb)
+
+    nextGetMe = { id: 555, firstName: 'Test', lastName: 'User' }
+    startError = null
+    getMeError = null
+    createdClients.length = 0
+  })
+
+  afterEach(() => {
+    testCacheDb.close()
+  })
+
+  it('registers handlers and persists mapped message fields', async () => {
+    const accountsDb = createAccountsDb([
+      { id: 1, phone: '+111', user_id: null },
+    ])
+    const ctx = createContext(accountsDb)
+
+    const { setupEventHandlers } = await import('../daemon/daemon-accounts')
+
+    const client = createClient()
+    const accountState: AccountConnectionState = {
+      accountId: 1,
+      phone: '+111',
+      name: null,
+      status: 'connected',
+      client,
+    }
+
+    setupEventHandlers(ctx, accountState)
+
+    const now = new Date('2024-01-01T00:00:00Z')
+    const message = {
+      id: 42,
+      chat: { id: 1000, type: 'chat', chatType: 'channel' },
+      sender: { id: 777 },
+      text: 'Photo message',
+      date: now,
+      isOutgoing: false,
+      media: { type: 'photo' },
+      replyToMessage: { id: 9 },
+      raw: {
+        fwdFrom: {
+          _: 'messageFwdHeader',
+          fromId: { _: 'peerUser', userId: 333 },
+          date: Math.floor(now.getTime() / 1000),
+        },
+      },
+    } satisfies MessageLike
+
+    accountState.eventHandlers?.onNewMessage(asMessage(message))
+
+    const messagesCache = createMessagesCache(testCacheDb)
+    const chatSyncState = createChatSyncStateService(testCacheDb)
+
+    const cached = messagesCache.get(1000, 42)
+    expect(cached).not.toBeNull()
+    expect(cached?.message_type).toBe('photo')
+    expect(cached?.has_media).toBe(1)
+    expect(cached?.reply_to_id).toBe(9)
+    expect(cached?.forward_from_id).toBe(333)
+
+    const state = chatSyncState.get(1000)
+    expect(state?.chat_type).toBe('channel')
+    expect(state?.sync_enabled).toBe(0)
+    expect(accountState.lastActivity).toBeDefined()
+    expect(client.onNewMessage.add).toHaveBeenCalled()
+  })
+
+  it('handles delete updates without chat context', async () => {
+    const accountsDb = createAccountsDb([
+      { id: 1, phone: '+111', user_id: null },
+    ])
+    const ctx = createContext(accountsDb)
+
+    const { setupEventHandlers } = await import('../daemon/daemon-accounts')
+
+    const client = createClient()
+    const accountState: AccountConnectionState = {
+      accountId: 1,
+      phone: '+111',
+      name: null,
+      status: 'connected',
+      client,
+    }
+
+    setupEventHandlers(ctx, accountState)
+
+    const messagesCache = createMessagesCache(testCacheDb)
+    messagesCache.upsert({
+      chat_id: 100,
+      message_id: 1,
+      text: 'One',
+      message_type: 'text',
+      date: Date.now(),
+      raw_json: '{}',
+    })
+    messagesCache.upsert({
+      chat_id: 200,
+      message_id: 2,
+      text: 'Two',
+      message_type: 'text',
+      date: Date.now(),
+      raw_json: '{}',
+    })
+
+    const deleteUpdate = {
+      channelId: null,
+      messageIds: [1, 2],
+    } satisfies DeleteMessageUpdateLike
+
+    accountState.eventHandlers?.onDeleteMessage(asDeleteUpdate(deleteUpdate))
+
+    expect(messagesCache.get(100, 1)?.is_deleted).toBe(1)
+    expect(messagesCache.get(200, 2)?.is_deleted).toBe(1)
+  })
+
+  it('merges duplicate user_id by keeping real phone account', async () => {
+    const accountsDb = createAccountsDb([
+      { id: 1, phone: 'user:555', user_id: 555 },
+      { id: 2, phone: '+1999', user_id: null },
+    ])
+    const ctx = createContext(accountsDb)
+
+    nextGetMe = { id: 555, firstName: 'Test', lastName: 'User' }
+
+    const { connectAccount } = await import('../daemon/daemon-accounts')
+
+    const connected = await connectAccount(ctx, 2, '+1999', null)
+
+    expect(connected).toBe(true)
+    expect(accountsDb.delete).toHaveBeenCalledWith(1)
+    expect(accountsDb.update).toHaveBeenCalledWith(2, { user_id: 555 })
+    const account = accountsDb.getById(2)
+    expect(account?.user_id).toBe(555)
+    expect(createdClients[0]?.startUpdatesLoop).toHaveBeenCalled()
+  })
+
+  it('merges duplicate user_id by keeping existing real phone account', async () => {
+    const accountsDb = createAccountsDb([
+      { id: 1, phone: '+1555', user_id: 555 },
+      { id: 2, phone: 'user:555', user_id: null },
+    ])
+    const ctx = createContext(accountsDb)
+
+    nextGetMe = { id: 555, firstName: 'Test', lastName: 'User' }
+
+    const { connectAccount } = await import('../daemon/daemon-accounts')
+
+    const connected = await connectAccount(ctx, 2, 'user:555', null)
+
+    expect(connected).toBe(false)
+    expect(accountsDb.setActive).toHaveBeenCalledWith(1)
+    expect(accountsDb.delete).toHaveBeenCalledWith(2)
+    expect(ctx.state.accounts.has(2)).toBe(false)
+    expect(createdClients[0]?.close).toHaveBeenCalled()
+  })
+
+  it('attemptReconnect resets attempts on success', async () => {
+    const accountsDb = createAccountsDb([
+      { id: 1, phone: '+111', user_id: 555 },
+    ])
+    const ctx = createContext(accountsDb)
+
+    const { attemptReconnect } = await import('../daemon/daemon-accounts')
+
+    const accountState: AccountConnectionState = {
+      accountId: 1,
+      phone: '+111',
+      name: null,
+      status: 'error',
+      reconnectAttempts: 2,
+    }
+
+    const ok = await attemptReconnect(ctx, accountState)
+
+    expect(ok).toBe(true)
+    expect(accountState.status).toBe('connected')
+    expect(accountState.reconnectAttempts).toBe(0)
+    expect(accountState.lastError).toBeUndefined()
+    expect(accountState.client).toBeDefined()
+  })
+
+  it('attemptReconnect schedules retry on failure', async () => {
+    const accountsDb = createAccountsDb([
+      { id: 1, phone: '+111', user_id: 555 },
+    ])
+    const ctx = createContext(accountsDb)
+
+    const { attemptReconnect } = await import('../daemon/daemon-accounts')
+
+    startError = new Error('boom')
+
+    const now = Date.now()
+    const accountState: AccountConnectionState = {
+      accountId: 1,
+      phone: '+111',
+      name: null,
+      status: 'error',
+      reconnectAttempts: 0,
+    }
+
+    const ok = await attemptReconnect(ctx, accountState)
+
+    expect(ok).toBe(false)
+    expect(accountState.status).toBe('error')
+    expect(accountState.lastError).toBe('boom')
+    expect(accountState.nextReconnectAt).toBeGreaterThan(now)
+  })
+})

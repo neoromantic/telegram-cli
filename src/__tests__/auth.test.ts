@@ -2,6 +2,7 @@
  * Authentication commands tests
  */
 import { beforeEach, describe, expect, it, mock } from 'bun:test'
+import type { TelegramClient } from '@mtcute/bun'
 import {
   type AuthDependencies,
   getAuthStatus,
@@ -11,14 +12,77 @@ import {
   type QrCodeGenerator,
 } from '../commands/auth'
 import { type AccountsDbInterface, createTestDatabase } from '../db'
+import type { Account } from '../types'
 
 // Set test environment
 process.env.BUN_ENV = 'test'
 
 describe('Authentication Commands', () => {
   let accountsDb: AccountsDbInterface
-  let mockClients: Map<number, any>
+  let mockClients: Map<number, TelegramClient>
   let deps: AuthDependencies
+
+  type SignInQrOptions = {
+    onUrlUpdated?: (url: string, expires: Date) => void
+    onQrScanned?: () => void
+  }
+
+  type MockAuthClient = Pick<
+    TelegramClient,
+    'start' | 'getMe' | 'signInQr' | 'call' | 'destroy'
+  >
+
+  type UserResult = Awaited<ReturnType<TelegramClient['getMe']>>
+
+  const createUser = (overrides: Partial<UserResult> = {}): UserResult =>
+    ({
+      id: 123,
+      firstName: 'Test',
+      lastName: 'User',
+      username: 'testuser',
+      ...overrides,
+    }) as UserResult
+
+  const createMockClient = (
+    overrides: Partial<MockAuthClient> = {},
+  ): TelegramClient => {
+    const client = {
+      start: mock(() =>
+        Promise.resolve(
+          createUser({
+            id: 123,
+            firstName: 'Test',
+            lastName: 'User',
+            username: 'testuser',
+          }),
+        ),
+      ),
+      getMe: mock(() =>
+        Promise.resolve(
+          createUser({
+            id: 123,
+            firstName: 'Test',
+            username: 'testuser',
+          }),
+        ),
+      ),
+      signInQr: mock((_options: SignInQrOptions) =>
+        Promise.resolve(
+          createUser({
+            id: 456,
+            firstName: 'QR',
+            lastName: 'User',
+            username: 'qruser',
+          }),
+        ),
+      ),
+      call: mock(() => Promise.resolve({})),
+      destroy: mock(() => Promise.resolve()),
+      ...overrides,
+    } satisfies MockAuthClient
+
+    return client as TelegramClient
+  }
 
   beforeEach(() => {
     const testDb = createTestDatabase()
@@ -29,24 +93,8 @@ describe('Authentication Commands', () => {
     deps = {
       accountsDb,
       createClient: mock((accountId: number) => {
-        const client = {
-          id: accountId,
-          start: mock(() =>
-            Promise.resolve({
-              firstName: 'Test',
-              lastName: 'User',
-              username: 'testuser',
-              id: 123,
-            }),
-          ),
-          getMe: mock(() =>
-            Promise.resolve({
-              firstName: 'Test',
-              username: 'testuser',
-              id: 123,
-            }),
-          ),
-          signInQr: mock((options: any) => {
+        const client = createMockClient({
+          signInQr: mock((options: SignInQrOptions) => {
             // Simulate QR code flow
             if (options.onUrlUpdated) {
               options.onUrlUpdated('tg://login?token=abc', new Date())
@@ -54,37 +102,26 @@ describe('Authentication Commands', () => {
             if (options.onQrScanned) {
               options.onQrScanned()
             }
-            return Promise.resolve({
-              firstName: 'QR',
-              lastName: 'User',
-              username: 'qruser',
-              id: 456,
-            })
+            return Promise.resolve(
+              createUser({
+                id: 456,
+                firstName: 'QR',
+                lastName: 'User',
+                username: 'qruser',
+              }),
+            )
           }),
-          call: mock(() => Promise.resolve({})),
-          close: mock(() => Promise.resolve()),
-        }
+        })
         mockClients.set(accountId, client)
-        return client as any
+        return client
       }),
       getClient: mock((accountId: number) => {
         let client = mockClients.get(accountId)
         if (!client) {
-          client = {
-            id: accountId,
-            getMe: mock(() =>
-              Promise.resolve({
-                firstName: 'Test',
-                username: 'testuser',
-                id: 123,
-              }),
-            ),
-            call: mock(() => Promise.resolve({})),
-            close: mock(() => Promise.resolve()),
-          }
+          client = createMockClient()
           mockClients.set(accountId, client)
         }
-        return client as any
+        return client
       }),
       isAuthorized: mock(() => Promise.resolve(true)),
       prompt: mock(() => Promise.resolve('123456')),
@@ -133,11 +170,20 @@ describe('Authentication Commands', () => {
       expect(account?.name).toBe('Test User')
     })
 
+    it('should persist username and label on login', async () => {
+      await loginWithPhone('+1234567890', deps, { label: 'Work' })
+
+      const account = accountsDb.getByPhone('+1234567890')
+      expect(account?.username).toBe('testuser')
+      expect(account?.label).toBe('Work')
+    })
+
     it('should return error on login failure', async () => {
-      deps.createClient = mock(() => ({
-        start: mock(() => Promise.reject(new Error('Invalid phone'))),
-        close: mock(() => Promise.resolve()),
-      })) as any
+      deps.createClient = mock(() =>
+        createMockClient({
+          start: mock(() => Promise.reject(new Error('Invalid phone'))),
+        }),
+      )
 
       const result = await loginWithPhone('+1234567890', deps)
 
@@ -146,10 +192,11 @@ describe('Authentication Commands', () => {
     })
 
     it('should handle non-Error exceptions', async () => {
-      deps.createClient = mock(() => ({
-        start: mock(() => Promise.reject('string error')),
-        close: mock(() => Promise.resolve()),
-      })) as any
+      deps.createClient = mock(() =>
+        createMockClient({
+          start: mock(() => Promise.reject('string error')),
+        }),
+      )
 
       const result = await loginWithPhone('+1234567890', deps)
 
@@ -158,23 +205,144 @@ describe('Authentication Commands', () => {
     })
 
     it('should handle user without lastName', async () => {
-      deps.createClient = mock((_accountId: number) => ({
-        start: mock(() =>
-          Promise.resolve({
-            firstName: 'Single',
-            lastName: null,
-            username: 'single',
-            id: 123,
-          }),
-        ),
-        close: mock(() => Promise.resolve()),
-      })) as any
+      deps.createClient = mock((_accountId: number) =>
+        createMockClient({
+          start: mock(() =>
+            Promise.resolve(
+              createUser({
+                id: 123,
+                firstName: 'Single',
+                lastName: null,
+                username: 'single',
+              }),
+            ),
+          ),
+        }),
+      )
 
       const result = await loginWithPhone('+1234567890', deps)
 
       expect(result.success).toBe(true)
       const account = accountsDb.getByPhone('+1234567890')
       expect(account?.name).toBe('Single')
+    })
+
+    it('merges duplicate user_id accounts and keeps existing', async () => {
+      // Use a lightweight in-memory accounts DB to avoid unique constraint conflicts
+      const accounts = new Map<number, Account>()
+      let nextId = 1
+      type CreateAccountInput = Parameters<AccountsDbInterface['create']>[0]
+      type UpdateAccountInput = Parameters<AccountsDbInterface['update']>[1]
+      const inMemoryDb: AccountsDbInterface = {
+        getAll: () => Array.from(accounts.values()),
+        getById: (id: number) => accounts.get(id) ?? null,
+        getByPhone: (phone: string) =>
+          Array.from(accounts.values()).find((acc) => acc.phone === phone) ??
+          null,
+        getByUserId: (userId: number) =>
+          Array.from(accounts.values()).find((acc) => acc.user_id === userId) ??
+          null,
+        getByUsername: (username: string) =>
+          Array.from(accounts.values()).find(
+            (acc) => acc.username === username,
+          ) ?? null,
+        getAllByLabel: (label: string) =>
+          Array.from(accounts.values()).filter((acc) => acc.label === label),
+        getActive: () =>
+          Array.from(accounts.values()).find((acc) => acc.is_active === 1) ??
+          null,
+        create: (data: CreateAccountInput) => {
+          const account: Account = {
+            id: nextId++,
+            phone: data.phone,
+            user_id: data.user_id ?? null,
+            name: data.name ?? null,
+            username: data.username ?? null,
+            label: data.label ?? null,
+            session_data: data.session_data ?? '',
+            is_active: data.is_active ? 1 : 0,
+            created_at: '',
+            updated_at: '',
+          }
+          accounts.set(account.id, account)
+          return account
+        },
+        update: (id: number, data: UpdateAccountInput) => {
+          const current = accounts.get(id)
+          if (!current) return null
+          const updated: Account = {
+            ...current,
+            phone: data.phone ?? current.phone,
+            user_id:
+              data.user_id !== undefined ? data.user_id : current.user_id,
+            name: data.name ?? current.name,
+            username:
+              data.username !== undefined ? data.username : current.username,
+            label: data.label !== undefined ? data.label : current.label,
+          }
+          accounts.set(id, updated)
+          return updated
+        },
+        updateSession: () => {},
+        setActive: (id: number) => {
+          for (const acc of accounts.values()) {
+            acc.is_active = acc.id === id ? 1 : 0
+          }
+        },
+        delete: (id: number) => accounts.delete(id),
+        count: () => accounts.size,
+      }
+
+      const existing = inMemoryDb.create({
+        phone: 'user:123',
+        user_id: 123,
+        name: 'Old',
+      })
+
+      deps.accountsDb = inMemoryDb
+
+      deps.createClient = mock((_accountId: number) =>
+        createMockClient({
+          start: mock(() =>
+            Promise.resolve(
+              createUser({
+                id: 123,
+                firstName: 'Merged',
+                lastName: 'User',
+                username: 'merged',
+              }),
+            ),
+          ),
+        }),
+      )
+
+      const result = await loginWithPhone('+15550001111', deps)
+
+      expect(result.success).toBe(true)
+      expect(result.account?.id).toBe(existing.id)
+      expect(inMemoryDb.count()).toBe(1)
+      expect(inMemoryDb.getById(existing.id)?.phone).toBe('+15550001111')
+    })
+
+    it('closes client after successful login', async () => {
+      const client = createMockClient({
+        start: mock(() =>
+          Promise.resolve(
+            createUser({
+              id: 321,
+              firstName: 'Close',
+              lastName: 'Test',
+              username: 'closer',
+            }),
+          ),
+        ),
+      })
+
+      deps.createClient = mock(() => client)
+
+      await loginWithPhone('+19998887777', deps)
+
+      expect(client.destroy).toHaveBeenCalled()
     })
   })
 
@@ -217,10 +385,11 @@ describe('Authentication Commands', () => {
     })
 
     it('should delete account on failure', async () => {
-      deps.createClient = mock(() => ({
-        signInQr: mock(() => Promise.reject(new Error('QR expired'))),
-        close: mock(() => Promise.resolve()),
-      })) as any
+      deps.createClient = mock(() =>
+        createMockClient({
+          signInQr: mock(() => Promise.reject(new Error('QR expired'))),
+        }),
+      )
 
       const result = await loginWithQr('test', deps)
 
@@ -233,6 +402,21 @@ describe('Authentication Commands', () => {
       await loginWithQr('test', deps)
 
       expect(mockQrGenerator.generate).toHaveBeenCalled()
+    })
+
+    it('merges duplicate user_id accounts and keeps existing', async () => {
+      const existing = accountsDb.create({
+        phone: '+19990000000',
+        user_id: 456,
+        name: 'Existing',
+      })
+
+      const result = await loginWithQr('dup', deps)
+
+      expect(result.success).toBe(true)
+      expect(result.account?.id).toBe(existing.id)
+      expect(accountsDb.count()).toBe(1)
+      expect(accountsDb.getById(existing.id)?.phone).toBe('+19990000000')
     })
   })
 
@@ -294,10 +478,11 @@ describe('Authentication Commands', () => {
         phone: '+1234567890',
         is_active: true,
       })
-      deps.getClient = mock(() => ({
-        call: mock(() => Promise.reject(new Error('Network error'))),
-        close: mock(() => Promise.resolve()),
-      })) as any
+      deps.getClient = mock(() =>
+        createMockClient({
+          call: mock(() => Promise.reject(new Error('Network error'))),
+        }),
+      )
 
       const result = await logout(account.id, deps)
 

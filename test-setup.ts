@@ -16,6 +16,14 @@ if (!process.env.TELEGRAM_CLI_DATA_DIR) {
   mkdirSync(testDataDir, { recursive: true })
 }
 
+// Provide dummy Telegram API credentials for tests that require a valid config
+if (!process.env.TELEGRAM_API_ID) {
+  process.env.TELEGRAM_API_ID = '12345'
+}
+if (!process.env.TELEGRAM_API_HASH) {
+  process.env.TELEGRAM_API_HASH = 'test-api-hash'
+}
+
 // Pre-import modules with barrel exports to ensure they're properly resolved
 // This helps prevent race conditions during parallel test loading
 // Import order matters - import modules without side effects first

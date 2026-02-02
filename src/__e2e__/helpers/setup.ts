@@ -23,7 +23,10 @@ export interface TestEnvironment {
   seedAccounts(
     accounts: Array<{
       phone: string
+      user_id?: number | null
       name?: string
+      username?: string | null
+      label?: string | null
       is_active?: boolean
       session_data?: string
     }>,
@@ -46,7 +49,10 @@ function initSchema(db: Database): void {
     CREATE TABLE IF NOT EXISTS accounts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       phone TEXT UNIQUE NOT NULL,
+      user_id INTEGER,
       name TEXT,
+      username TEXT,
+      label TEXT,
       session_data TEXT NOT NULL DEFAULT '',
       is_active INTEGER DEFAULT 0,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -55,6 +61,13 @@ function initSchema(db: Database): void {
   `)
 
   db.run('CREATE INDEX IF NOT EXISTS idx_accounts_phone ON accounts(phone)')
+  db.run(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_user_id ON accounts(user_id)',
+  )
+  db.run(
+    'CREATE INDEX IF NOT EXISTS idx_accounts_username ON accounts(username)',
+  )
+  db.run('CREATE INDEX IF NOT EXISTS idx_accounts_label ON accounts(label)')
   db.run(
     'CREATE INDEX IF NOT EXISTS idx_accounts_active ON accounts(is_active)',
   )
@@ -95,14 +108,17 @@ export function createTestEnvironment(testName: string): TestEnvironment {
       }
 
       const stmt = db!.prepare(`
-        INSERT INTO accounts (phone, name, session_data, is_active)
-        VALUES ($phone, $name, $session_data, $is_active)
+        INSERT INTO accounts (phone, user_id, name, username, label, session_data, is_active)
+        VALUES ($phone, $user_id, $name, $username, $label, $session_data, $is_active)
       `)
 
       for (const account of accounts) {
         stmt.run({
           $phone: account.phone,
+          $user_id: account.user_id ?? null,
           $name: account.name ?? null,
+          $username: account.username ?? null,
+          $label: account.label ?? null,
           $session_data: account.session_data ?? '',
           $is_active: account.is_active ? 1 : 0,
         })

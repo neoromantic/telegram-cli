@@ -2,6 +2,7 @@
  * Unit tests for daemon account helpers (no getCacheDb dependency)
  */
 import { describe, expect, it, mock } from 'bun:test'
+import type { DeleteMessageUpdate, Message, TelegramClient } from '@mtcute/bun'
 import {
   closeClientSafe,
   removeEventHandlers,
@@ -14,15 +15,48 @@ import {
 } from '../daemon/daemon-context'
 import type { AccountConnectionState } from '../daemon/types'
 
-class MockEvent<T extends (...args: any[]) => void> {
-  handlers: T[] = []
-  add = (handler: T) => {
+class MockEmitter<T> {
+  handlers: Array<(value: T) => void> = []
+  get length() {
+    return this.handlers.length
+  }
+  add = (handler: (value: T) => void) => {
     this.handlers.push(handler)
   }
-  remove = (handler: T) => {
+  remove = (handler: (value: T) => void) => {
     this.handlers = this.handlers.filter((entry) => entry !== handler)
   }
+  emit = (value: T) => {
+    for (const handler of this.handlers) {
+      handler(value)
+    }
+  }
+  once = (handler: (value: T) => void) => {
+    const wrapper = (value: T) => {
+      this.remove(wrapper)
+      handler(value)
+    }
+    this.add(wrapper)
+  }
+  listeners = () => this.handlers
+  clear = () => {
+    this.handlers = []
+  }
+  forwardTo = (_emitter: MockEmitter<T>) => {}
 }
+
+const createClientWithEvents = (): TelegramClient => {
+  const client = {
+    onNewMessage: new MockEmitter<Message>(),
+    onEditMessage: new MockEmitter<Message>(),
+    onDeleteMessage: new MockEmitter<DeleteMessageUpdate>(),
+  }
+
+  return client as unknown as TelegramClient
+}
+
+const asTelegramClient = (client: unknown): TelegramClient =>
+  client as TelegramClient
 
 function createLogger() {
   return {
@@ -64,6 +98,8 @@ function createContext(): DaemonContext {
       getById: () => null,
       getByPhone: () => null,
       getByUserId: () => null,
+      getByUsername: () => null,
+      getAllByLabel: () => [],
       getActive: () => null,
       create: () => {
         throw new Error('not used')
@@ -81,18 +117,14 @@ function createContext(): DaemonContext {
 describe('removeEventHandlers', () => {
   it('clears handlers and unregisters events', () => {
     const ctx = createContext()
-    const client = {
-      onNewMessage: new MockEvent<(msg: any) => void>(),
-      onEditMessage: new MockEvent<(msg: any) => void>(),
-      onDeleteMessage: new MockEvent<(update: any) => void>(),
-    }
+    const client = createClientWithEvents()
 
     const accountState: AccountConnectionState = {
       accountId: 1,
       phone: '+10000000000',
       name: null,
       status: 'connected',
-      client: client as any,
+      client,
       eventHandlers: {
         onNewMessage: () => {},
         onEditMessage: () => {},
@@ -146,7 +178,7 @@ describe('signal/cleanup helpers', () => {
     const calls: string[] = []
     const originalOn = process.on
 
-    process.on = ((signal: string, handler: (...args: any[]) => void) => {
+    process.on = ((signal: string, handler: (...args: unknown[]) => void) => {
       calls.push(signal)
       return originalOn.call(process, signal, handler)
     }) as typeof process.on
@@ -164,7 +196,7 @@ describe('signal/cleanup helpers', () => {
 
   it('closeClientSafe ignores missing close and logs errors', async () => {
     const ctx = createContext()
-    const clientWithoutClose = {} as any
+    const clientWithoutClose = asTelegramClient({})
 
     await closeClientSafe(ctx, clientWithoutClose, 'noop')
 
@@ -172,9 +204,9 @@ describe('signal/cleanup helpers', () => {
       close: () => {
         throw new Error('boom')
       },
-    } as any
+    }
 
-    await closeClientSafe(ctx, errorClient, 'error')
+    await closeClientSafe(ctx, asTelegramClient(errorClient), 'error')
     expect(ctx.logger.warn).toHaveBeenCalled()
   })
 })

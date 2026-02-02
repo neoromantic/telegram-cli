@@ -61,6 +61,8 @@ describe('Types Module', () => {
         phone: '+1234567890',
         user_id: 12345,
         name: 'Test',
+        username: 'testuser',
+        label: 'Work',
         session_data: '',
         is_active: 1,
         created_at: '2024-01-01',
@@ -77,7 +79,7 @@ describe('Types Module', () => {
 
     it('should allow GlobalOptions type', () => {
       const options: GlobalOptions = {
-        account: 1,
+        account: '1',
         format: 'json',
         verbose: true,
       }

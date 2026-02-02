@@ -152,6 +152,26 @@ describe('sync schema', () => {
     })
   })
 
+  describe('message_search table', () => {
+    it('creates message_search FTS table', () => {
+      const tables = db
+        .query(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name='message_search'",
+        )
+        .all()
+      expect(tables).toHaveLength(1)
+    })
+
+    it('creates search_meta table', () => {
+      const tables = db
+        .query(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name='search_meta'",
+        )
+        .all()
+      expect(tables).toHaveLength(1)
+    })
+  })
+
   describe('chat_sync_state table', () => {
     it('creates chat_sync_state table', () => {
       const tables = db

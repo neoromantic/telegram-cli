@@ -184,6 +184,52 @@ describe('UpdateHandlers', () => {
       expect(state?.forward_cursor).toBe(10)
     })
 
+    it('does not regress forward cursor for older messages', async () => {
+      chatSyncState.upsert({
+        chat_id: 100,
+        chat_type: 'private',
+        sync_priority: 1,
+        sync_enabled: true,
+        forward_cursor: 10,
+      })
+
+      const ctx: UpdateContext = {
+        accountId: 1,
+        receivedAt: Date.now(),
+      }
+
+      await handlers.handleNewMessage(ctx, {
+        chatId: 100,
+        messageId: 5,
+        fromId: 123,
+        text: 'Old message',
+        date: Date.now(),
+        isOutgoing: false,
+      })
+
+      const state = chatSyncState.get(100)
+      expect(state?.forward_cursor).toBe(10)
+    })
+
+    it('updates last forward sync timestamp', async () => {
+      const ctx: UpdateContext = {
+        accountId: 1,
+        receivedAt: Date.now(),
+      }
+
+      await handlers.handleNewMessage(ctx, {
+        chatId: 101,
+        messageId: 1,
+        fromId: 123,
+        text: 'Track sync',
+        date: Date.now(),
+        isOutgoing: false,
+      })
+
+      const state = chatSyncState.get(101)
+      expect(state?.last_forward_sync).not.toBeNull()
+    })
+
     it('increments synced messages count', async () => {
       chatSyncState.upsert({
         chat_id: 100,
@@ -420,6 +466,45 @@ describe('UpdateHandlers', () => {
         JSON.stringify({ _: 'message', id: 2, data: 'second' }),
       )
       expect(msg3?.raw_json).toBe('{}')
+    })
+
+    it('updates forward and backward cursors based on batch range', async () => {
+      chatSyncState.upsert({
+        chat_id: 500,
+        chat_type: 'private',
+        sync_priority: 1,
+        sync_enabled: true,
+        forward_cursor: 10,
+        backward_cursor: 5,
+      })
+
+      const ctx: UpdateContext = {
+        accountId: 1,
+        receivedAt: Date.now(),
+      }
+
+      await handlers.handleBatchMessages(ctx, [
+        {
+          chatId: 500,
+          messageId: 12,
+          fromId: 1,
+          text: 'Newer',
+          date: Date.now(),
+          isOutgoing: false,
+        },
+        {
+          chatId: 500,
+          messageId: 3,
+          fromId: 1,
+          text: 'Older',
+          date: Date.now(),
+          isOutgoing: false,
+        },
+      ])
+
+      const state = chatSyncState.get(500)
+      expect(state?.forward_cursor).toBe(12)
+      expect(state?.backward_cursor).toBe(3)
     })
   })
 })
@@ -741,6 +826,88 @@ describe('UpdateHandlers error handling', () => {
       expect(errorLogs[0]).not.toContain('messageIds=[1,2,3,4,5,6')
 
       upsertBatchSpy.mockRestore()
+    })
+  })
+
+  describe('handleDeleteMessages', () => {
+    it('logs error and continues when delete fails', async () => {
+      const handlers = createUpdateHandlers({
+        db,
+        messagesCache,
+        chatSyncState,
+        logger: mockLogger,
+      })
+
+      const deleteSpy = spyOn(messagesCache, 'markDeleted').mockImplementation(
+        () => {
+          throw new Error('Delete failed')
+        },
+      )
+
+      const ctx: UpdateContext = {
+        accountId: 1,
+        receivedAt: Date.now(),
+      }
+
+      await handlers.handleDeleteMessages(ctx, {
+        chatId: 300,
+        messageIds: [1, 2],
+      })
+
+      expect(errorLogs.length).toBe(1)
+      expect(errorLogs[0]).toContain('Failed to handle delete messages')
+      expect(errorLogs[0]).toContain('chatId=300')
+      deleteSpy.mockRestore()
+    })
+  })
+
+  describe('handleBatchMessages', () => {
+    it('logs per-chat errors and continues processing other chats', async () => {
+      const handlers = createUpdateHandlers({
+        db,
+        messagesCache,
+        chatSyncState,
+        logger: mockLogger,
+      })
+
+      const originalUpsert = messagesCache.upsertBatch.bind(messagesCache)
+      const upsertSpy = spyOn(messagesCache, 'upsertBatch').mockImplementation(
+        (inputs) => {
+          if (inputs[0]?.chat_id === 900) {
+            throw new Error('Batch failed')
+          }
+          return originalUpsert(inputs)
+        },
+      )
+
+      const ctx: UpdateContext = {
+        accountId: 1,
+        receivedAt: Date.now(),
+      }
+
+      await handlers.handleBatchMessages(ctx, [
+        {
+          chatId: 900,
+          messageId: 1,
+          fromId: 1,
+          text: 'bad',
+          date: Date.now(),
+          isOutgoing: false,
+        },
+        {
+          chatId: 901,
+          messageId: 2,
+          fromId: 1,
+          text: 'ok',
+          date: Date.now(),
+          isOutgoing: false,
+        },
+      ])
+
+      expect(errorLogs.length).toBe(1)
+      expect(errorLogs[0]).toContain('chatId=900')
+      expect(messagesCache.get(901, 2)).not.toBeNull()
+      upsertSpy.mockRestore()
     })
   })
 })

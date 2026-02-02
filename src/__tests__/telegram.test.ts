@@ -1,7 +1,9 @@
 /**
  * Telegram service tests
  */
+
 import { beforeEach, describe, expect, it, mock } from 'bun:test'
+import type { TelegramClient } from '@mtcute/bun'
 import { type AccountsDbInterface, createTestDatabase } from '../db'
 import {
   type ClientFactory,
@@ -151,7 +153,7 @@ describe('Telegram Service', () => {
             call: mock(() => Promise.resolve({})),
           }
           createdClients.set(accountId, client)
-          return client as any
+          return client as unknown as TelegramClient
         }),
       }
 
@@ -280,7 +282,7 @@ describe('Telegram Service', () => {
     it('should return true when getMe succeeds', async () => {
       const mockClient = {
         getMe: mock(() => Promise.resolve({ id: 123, firstName: 'Test' })),
-      } as any
+      } as unknown as TelegramClient
 
       const result = await isAuthorized(mockClient)
 
@@ -290,7 +292,7 @@ describe('Telegram Service', () => {
     it('should return false when getMe throws', async () => {
       const mockClient = {
         getMe: mock(() => Promise.reject(new Error('Not authorized'))),
-      } as any
+      } as unknown as TelegramClient
 
       const result = await isAuthorized(mockClient)
 

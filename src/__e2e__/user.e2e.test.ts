@@ -27,11 +27,11 @@ describe('E2E: User Commands', () => {
     })
 
     it('should require authentication', async () => {
-      // No accounts seeded, so should fail with TELEGRAM_ERROR (exit code 5)
-      const result = await runCliFailure(['me'], 5, env.getCliOptions())
+      // No accounts seeded, so should fail with AUTH_REQUIRED (exit code 2)
+      const result = await runCliFailure(['me'], 2, env.getCliOptions())
 
       // Should indicate no active account
-      expect(result.exitCode).toBe(5)
+      expect(result.exitCode).toBe(2)
       const response = result.json as {
         success: boolean
         error: { code: string }
@@ -50,7 +50,7 @@ describe('E2E: User Commands', () => {
       const result = await runCli(['me', '--help'], env.getCliOptions())
 
       expect(result.stdout).toContain('account')
-      expect(result.stdout).toContain('Account ID')
+      expect(result.stdout).toContain('Account selector')
     })
   })
 
@@ -82,7 +82,7 @@ describe('E2E: User Commands', () => {
       const result = await runCli(['user', '--help'], env.getCliOptions())
 
       expect(result.stdout).toContain('account')
-      expect(result.stdout).toContain('Account ID')
+      expect(result.stdout).toContain('Account selector')
     })
 
     it('should require authentication for lookup', async () => {

@@ -17,6 +17,8 @@ function createAccountsDb(
     phone: account.phone,
     user_id: null,
     name: null,
+    username: null,
+    label: null,
     session_data: '',
     is_active: 0,
     created_at: '',
@@ -29,6 +31,8 @@ function createAccountsDb(
     getByPhone: (phone: string) =>
       normalized.find((acc) => acc.phone === phone) ?? null,
     getByUserId: () => null,
+    getByUsername: () => null,
+    getAllByLabel: () => [],
     getActive: () => null,
     create: () => {
       throw new Error('not used')

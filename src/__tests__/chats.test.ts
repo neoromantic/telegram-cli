@@ -9,6 +9,7 @@
 
 import type { Database } from 'bun:sqlite'
 import { beforeEach, describe, expect, it, mock } from 'bun:test'
+import type { tl } from '@mtcute/tl'
 
 import {
   type CachedChatInput,
@@ -18,6 +19,7 @@ import {
 import { createTestCacheDatabase } from '../db/schema'
 import type { ChatType } from '../db/types'
 import { getDefaultCacheConfig, isCacheStale } from '../db/types'
+import { toLong } from '../utils/long'
 
 // =============================================================================
 // Test Helpers
@@ -165,44 +167,34 @@ function createMockClient() {
 
       const limit = opts?.limit ?? dialogs.length
       for (let i = 0; i < Math.min(limit, dialogs.length); i++) {
-        yield dialogs[i]
+        const dialog = dialogs[i]
+        if (!dialog) {
+          continue
+        }
+        yield dialog
       }
     }),
     call: mock(
       (
-        params: any,
-      ): Promise<{
-        chats: Array<{
-          id: number
-          title: string
-          username: string
-          megagroup: boolean
-          broadcast: boolean
-          participantsCount: number
-          accessHash: bigint
-        }>
-        users: Array<{
-          id: number
-          firstName: string
-          lastName: string
-          username: string
-          accessHash: bigint
-        }>
-      }> => {
+        params: Record<string, unknown>,
+      ): Promise<{ chats: tl.TypeChat[]; users: tl.TypeUser[] }> => {
         // Mock contacts.resolveUsername
         if (params._ === 'contacts.resolveUsername') {
-          const username = params.username
+          const username = params.username as string
           if (username === 'testchannel') {
             return Promise.resolve({
               chats: [
                 {
+                  _: 'channel',
                   id: 999,
                   title: 'Test Channel',
                   username: 'testchannel',
                   megagroup: false,
                   broadcast: true,
                   participantsCount: 500,
-                  accessHash: BigInt('123456789'),
+                  accessHash: toLong('123456789'),
+                  photo: { _: 'chatPhotoEmpty' },
+                  date: Math.floor(Date.now() / 1000),
                 },
               ],
               users: [],
@@ -213,11 +205,12 @@ function createMockClient() {
               chats: [],
               users: [
                 {
+                  _: 'user',
                   id: 888,
                   firstName: 'Test',
                   lastName: 'User',
                   username: 'testuser',
-                  accessHash: BigInt('987654321'),
+                  accessHash: toLong('987654321'),
                 },
               ],
             })
@@ -1045,7 +1038,7 @@ describe('Dialog Conversion', () => {
           username: 'bigcommunity',
           megagroup: true,
           participantsCount: 10000,
-          accessHash: BigInt('123456'),
+          accessHash: toLong('123456'),
         },
         topMessage: 300,
         date: Math.floor(Date.now() / 1000),
@@ -1079,6 +1072,7 @@ describe('Dialog Conversion', () => {
           title: 'News Channel',
           username: 'news',
           megagroup: false,
+          gigagroup: false,
           broadcast: true,
           participantsCount: 50000,
         },
@@ -1091,7 +1085,7 @@ describe('Dialog Conversion', () => {
 
       // Simulate conversion logic
       const type: ChatType =
-        dialog.chat.megagroup || (dialog.chat as any).gigagroup
+        dialog.chat.megagroup || dialog.chat.gigagroup
           ? 'supergroup'
           : 'channel'
       const chatId = String(dialog.peer.channelId)
@@ -1231,16 +1225,16 @@ describe('ChatsCache Integration', () => {
 describe('Mock Client Integration', () => {
   it('should create mock client with iterDialogs', async () => {
     const client = createMockClient()
-    const dialogs: any[] = []
+    const dialogs: Array<{ peer: { _: string } }> = []
 
     for await (const dialog of client.iterDialogs({ limit: 10 })) {
       dialogs.push(dialog)
     }
 
     expect(dialogs.length).toBe(3)
-    expect(dialogs[0].peer._).toBe('peerUser')
-    expect(dialogs[1].peer._).toBe('peerChat')
-    expect(dialogs[2].peer._).toBe('peerChannel')
+    expect(dialogs[0]!.peer._).toBe('peerUser')
+    expect(dialogs[1]!.peer._).toBe('peerChat')
+    expect(dialogs[2]!.peer._).toBe('peerChannel')
   })
 
   it('should resolve username for channel', async () => {
@@ -1251,7 +1245,14 @@ describe('Mock Client Integration', () => {
     })
 
     expect(result.chats.length).toBe(1)
-    expect(result.chats[0]?.title).toBe('Test Channel')
+    const channel = result.chats.find(
+      (chat): chat is tl.RawChannel => chat._ === 'channel',
+    )
+    expect(channel).toBeDefined()
+    if (!channel) {
+      throw new Error('Expected RawChannel in resolveUsername response')
+    }
+    expect(channel.title).toBe('Test Channel')
   })
 
   it('should resolve username for user', async () => {
@@ -1262,7 +1263,14 @@ describe('Mock Client Integration', () => {
     })
 
     expect(result.users.length).toBe(1)
-    expect(result.users[0]?.firstName).toBe('Test')
+    const user = result.users.find(
+      (item): item is tl.RawUser => item._ === 'user',
+    )
+    expect(user).toBeDefined()
+    if (!user) {
+      throw new Error('Expected RawUser in resolveUsername response')
+    }
+    expect(user.firstName).toBe('Test')
   })
 
   it('should throw for non-existent username', async () => {

@@ -2,6 +2,7 @@
  * Tests for daemon scheduler logic (no module mocks)
  */
 import { describe, expect, it, mock } from 'bun:test'
+import type { TelegramClient } from '@mtcute/bun'
 import type { DaemonContext } from '../daemon/daemon-context'
 import { createDaemonRuntime } from '../daemon/daemon-context'
 import {
@@ -9,10 +10,17 @@ import {
   initializeScheduler,
   processJobs,
 } from '../daemon/daemon-scheduler'
+import type { SyncScheduler } from '../daemon/scheduler'
+import type { RealSyncWorker } from '../daemon/sync-worker'
 import { getCacheDb } from '../db'
 import { createTestDatabase } from '../db/index.ts'
 import { initCacheSchema } from '../db/schema'
-import { initSyncSchema, SyncJobType, SyncPriority } from '../db/sync-schema'
+import {
+  initSyncSchema,
+  type SyncJobRow,
+  SyncJobType,
+  SyncPriority,
+} from '../db/sync-schema'
 
 function createLogger() {
   return {
@@ -21,6 +29,69 @@ function createLogger() {
     warn: mock(() => {}),
     error: mock(() => {}),
   }
+}
+
+const asTelegramClient = (client: Partial<TelegramClient>): TelegramClient =>
+  client as TelegramClient
+
+const createSchedulerStub = (
+  overrides: Partial<SyncScheduler> = {},
+): SyncScheduler => {
+  const scheduler = {
+    queueForwardCatchup: mock(() => {}),
+    queueBackwardHistory: mock(() => {}),
+    queueInitialLoad: mock(() => {}),
+    initializeForStartup: mock(async () => {}),
+    getNextJob: () => null,
+    claimNextJob: () => null,
+    startJob: () => true,
+    completeJob: () => true,
+    failJob: () => true,
+    updateProgress: () => {},
+    getStatus: () => ({
+      pendingJobs: 0,
+      runningJobs: 0,
+      jobsByType: {},
+      jobsByPriority: {},
+    }),
+    cleanup: () => 0,
+    cancelJobsForChat: () => 0,
+    recoverCrashedJobs: () => 0,
+    ...overrides,
+  } satisfies SyncScheduler
+
+  return scheduler
+}
+
+const createWorkerStub = (
+  overrides: Partial<RealSyncWorker> = {},
+): RealSyncWorker => {
+  const worker = {
+    processJobReal: mock(async () => ({
+      success: true,
+      messagesFetched: 0,
+    })),
+    processForwardCatchupReal: mock(async () => ({
+      success: true,
+      messagesFetched: 0,
+    })),
+    processBackwardHistoryReal: mock(async () => ({
+      success: true,
+      messagesFetched: 0,
+    })),
+    processInitialLoadReal: mock(async () => ({
+      success: true,
+      messagesFetched: 0,
+    })),
+    runOnceReal: mock(async () => null),
+    canMakeApiCall: () => true,
+    getWaitTime: () => 0,
+    buildInputPeer: mock((_chatId: number) => null),
+    parseRawMessage: mock((_msg: unknown, _chatId: number) => null),
+    ...overrides,
+  } satisfies RealSyncWorker
+
+  return worker
 }
 
 function createContext(): DaemonContext {
@@ -67,8 +138,8 @@ describe('initializeScheduler', () => {
       phone: '+10000000001',
       name: null,
       status: 'connected',
-      client: { call: async () => ({}) },
-    } as any)
+      client: asTelegramClient({ call: async () => ({}) }),
+    })
 
     await initializeScheduler(ctx)
 
@@ -81,39 +152,44 @@ describe('processJobs', () => {
   it('queues follow-up jobs on success with hasMore', async () => {
     const ctx = createContext()
 
-    const job = {
+    const job: SyncJobRow = {
       id: 1,
       chat_id: 10,
       job_type: SyncJobType.BackwardHistory,
       priority: SyncPriority.High,
-    } as any
+      status: 'pending',
+      cursor_start: null,
+      cursor_end: null,
+      messages_fetched: 0,
+      error_message: null,
+      created_at: Date.now(),
+      started_at: null,
+      completed_at: null,
+    }
 
-    const scheduler = {
+    const scheduler = createSchedulerStub({
       getNextJob: () => job,
       queueBackwardHistory: mock(() => {}),
       queueForwardCatchup: mock(() => {}),
-      cleanup: () => 0,
-      getStatus: () => ({ pendingJobs: 0, runningJobs: 0 }),
-    }
+    })
 
-    const worker = {
-      canMakeApiCall: () => true,
+    const worker = createWorkerStub({
       processJobReal: mock(async () => ({
         success: true,
         messagesFetched: 4,
         hasMore: true,
       })),
-    }
+    })
 
-    ctx.runtime.scheduler = scheduler as any
-    ctx.runtime.syncWorkers.set(1, worker as any)
+    ctx.runtime.scheduler = scheduler
+    ctx.runtime.syncWorkers.set(1, worker)
     ctx.state.accounts.set(1, {
       accountId: 1,
       phone: '+10000000001',
       name: null,
       status: 'connected',
-      client: {},
-    } as any)
+      client: asTelegramClient({}),
+    })
 
     await processJobs(ctx)
 
@@ -125,40 +201,45 @@ describe('processJobs', () => {
   it('records last job time when rate limited', async () => {
     const ctx = createContext()
 
-    const job = {
+    const job: SyncJobRow = {
       id: 2,
       chat_id: 44,
       job_type: SyncJobType.ForwardCatchup,
       priority: SyncPriority.High,
-    } as any
+      status: 'pending',
+      cursor_start: null,
+      cursor_end: null,
+      messages_fetched: 0,
+      error_message: null,
+      created_at: Date.now(),
+      started_at: null,
+      completed_at: null,
+    }
 
-    const scheduler = {
+    const scheduler = createSchedulerStub({
       getNextJob: () => job,
       queueBackwardHistory: mock(() => {}),
       queueForwardCatchup: mock(() => {}),
-      cleanup: () => 0,
-      getStatus: () => ({ pendingJobs: 0, runningJobs: 0 }),
-    }
+    })
 
-    const worker = {
-      canMakeApiCall: () => true,
+    const worker = createWorkerStub({
       processJobReal: mock(async () => ({
         success: false,
         messagesFetched: 0,
         rateLimited: true,
         waitSeconds: 3,
       })),
-    }
+    })
 
-    ctx.runtime.scheduler = scheduler as any
-    ctx.runtime.syncWorkers.set(1, worker as any)
+    ctx.runtime.scheduler = scheduler
+    ctx.runtime.syncWorkers.set(1, worker)
     ctx.state.accounts.set(1, {
       accountId: 1,
       phone: '+10000000001',
       name: null,
       status: 'connected',
-      client: {},
-    } as any)
+      client: asTelegramClient({}),
+    })
 
     await processJobs(ctx)
 
@@ -173,11 +254,9 @@ describe('processJobs', () => {
 
     Date.now = () => now
     ctx.runtime.lastJobProcessTime = now
-    ctx.runtime.scheduler = {
+    ctx.runtime.scheduler = createSchedulerStub({
       getNextJob: mock(() => null),
-      cleanup: () => 0,
-      getStatus: () => ({ pendingJobs: 0, runningJobs: 0 }),
-    } as any
+    })
 
     const scheduler = ctx.runtime.scheduler!
     try {
@@ -194,12 +273,12 @@ describe('cleanupScheduler', () => {
   it('clears scheduler and workers after cleanup', () => {
     const ctx = createContext()
 
-    const scheduler = {
+    const scheduler = createSchedulerStub({
       cleanup: mock(() => 2),
-    }
+    })
 
-    ctx.runtime.scheduler = scheduler as any
-    ctx.runtime.syncWorkers.set(1, { canMakeApiCall: () => true } as any)
+    ctx.runtime.scheduler = scheduler
+    ctx.runtime.syncWorkers.set(1, createWorkerStub())
 
     cleanupScheduler(ctx)
 

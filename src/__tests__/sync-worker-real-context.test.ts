@@ -3,6 +3,8 @@
  */
 import type { Database } from 'bun:sqlite'
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test'
+import type { TelegramClient } from '@mtcute/bun'
+import type { tl } from '@mtcute/tl'
 import {
   canMakeApiCall,
   getInputPeer,
@@ -16,9 +18,62 @@ import {
   extractFloodWaitSeconds,
   fetchMessagesRaw,
 } from '../daemon/sync-worker-real-helpers'
+import type { RealSyncWorkerContext } from '../daemon/sync-worker-real-types'
+import { createChatSyncStateService } from '../db/chat-sync-state'
 import { createChatsCache } from '../db/chats-cache'
+import { createMessagesCache } from '../db/messages-cache'
 import { createRateLimitsService } from '../db/rate-limits'
 import { createTestCacheDatabase } from '../db/schema'
+import { createSyncJobsService } from '../db/sync-jobs'
+import { initSyncSchema } from '../db/sync-schema'
+import { toLong } from '../utils/long'
+
+type MockCall = <T extends tl.RpcMethod>(
+  request: T,
+) => Promise<tl.RpcCallReturn[T['_']]>
+
+type MockClient = Pick<TelegramClient, 'call'>
+
+function assertInputPeerUser(
+  peer: tl.TypeInputPeer | null,
+): asserts peer is tl.RawInputPeerUser {
+  if (!peer || peer._ !== 'inputPeerUser') {
+    throw new Error(`Expected inputPeerUser, got ${peer?._ ?? 'null'}`)
+  }
+}
+
+function assertInputPeerChat(
+  peer: tl.TypeInputPeer | null,
+): asserts peer is tl.RawInputPeerChat {
+  if (!peer || peer._ !== 'inputPeerChat') {
+    throw new Error(`Expected inputPeerChat, got ${peer?._ ?? 'null'}`)
+  }
+}
+
+function assertInputPeerChannel(
+  peer: tl.TypeInputPeer | null,
+): asserts peer is tl.RawInputPeerChannel {
+  if (!peer || peer._ !== 'inputPeerChannel') {
+    throw new Error(`Expected inputPeerChannel, got ${peer?._ ?? 'null'}`)
+  }
+}
+
+function isGetHistoryRequest(
+  request: tl.RpcMethod,
+): request is tl.messages.RawGetHistoryRequest {
+  return request._ === 'messages.getHistory'
+}
+
+function createMockClient(overrides: Partial<MockClient> = {}): TelegramClient {
+  const client = {
+    call: mock<MockCall>(async () => {
+      throw new Error('Unexpected API call')
+    }),
+    ...overrides,
+  } satisfies MockClient
+
+  return client as TelegramClient
+}
 
 describe('sync-worker real helpers/context', () => {
   let db: Database
@@ -26,6 +81,7 @@ describe('sync-worker real helpers/context', () => {
   beforeEach(() => {
     const testDb = createTestCacheDatabase()
     db = testDb.db
+    initSyncSchema(db)
   })
 
   afterEach(() => {
@@ -38,9 +94,9 @@ describe('sync-worker real helpers/context', () => {
       const peer = buildInputPeer(123, chatsCache)
 
       expect(peer).not.toBeNull()
-      expect(peer?._).toBe('inputPeerUser')
-      expect(peer?.userId).toBe(123)
-      expect(peer?.accessHash).toBe(0n)
+      assertInputPeerUser(peer)
+      expect(peer.userId).toBe(123)
+      expect(peer.accessHash?.toString()).toBe(toLong(0).toString())
     })
 
     it('returns null for negative chatId without cache entry', () => {
@@ -102,13 +158,13 @@ describe('sync-worker real helpers/context', () => {
       const groupPeer = buildInputPeer(2, chatsCache)
       const channelPeer = buildInputPeer(3, chatsCache)
 
-      expect(privatePeer?._).toBe('inputPeerUser')
-      expect(privatePeer?.accessHash).toBe(999n)
-      expect(groupPeer?._).toBe('inputPeerChat')
-      expect(groupPeer?.chatId).toBe(2)
-      expect(channelPeer?._).toBe('inputPeerChannel')
-      expect(channelPeer?.channelId).toBe(3)
-      expect(channelPeer?.accessHash).toBe(555n)
+      assertInputPeerUser(privatePeer)
+      expect(privatePeer.accessHash?.toString()).toBe(toLong(999).toString())
+      assertInputPeerChat(groupPeer)
+      expect(groupPeer.chatId).toBe(2)
+      assertInputPeerChannel(channelPeer)
+      expect(channelPeer.channelId).toBe(3)
+      expect(channelPeer.accessHash?.toString()).toBe(toLong(555).toString())
     })
   })
 
@@ -146,36 +202,57 @@ describe('sync-worker real helpers/context', () => {
 
   describe('fetchMessagesRaw', () => {
     it('returns messages and count from client.call', async () => {
-      const client = {
-        call: mock(async (payload: Record<string, unknown>) => {
-          expect(payload._).toBe('messages.getHistory')
-          expect(payload.offsetId).toBe(5)
-          return {
-            messages: [{ _: 'message', id: 1, date: 1, message: 'hi' }],
-            count: 1,
+      const client = createMockClient({
+        call: mock<MockCall>(async (payload) => {
+          if (!isGetHistoryRequest(payload)) {
+            throw new Error('Unexpected API call')
           }
+
+          expect(payload.offsetId).toBe(5)
+
+          const result: tl.messages.RawMessages = {
+            _: 'messages.messages',
+            messages: [
+              {
+                _: 'message',
+                id: 1,
+                date: 1,
+                message: 'hi',
+                peerId: { _: 'peerUser', userId: 1 },
+              },
+            ],
+            chats: [],
+            users: [],
+            topics: [],
+          }
+
+          return result
         }),
-      }
+      })
 
       const result = await fetchMessagesRaw(
-        client as any,
-        { _: 'inputPeerUser', userId: 1, accessHash: 0n },
+        client,
+        { _: 'inputPeerUser', userId: 1, accessHash: toLong(0) },
         { offsetId: 5, limit: 1 },
       )
 
       expect(result.messages.length).toBe(1)
-      expect(result.count).toBe(1)
+      expect(result.count).toBeUndefined()
     })
   })
 
   describe('sync-worker real context helpers', () => {
     it('records API call and checks wait state', () => {
       const rateLimits = createRateLimitsService(db)
-      const ctx = {
+      const ctx: RealSyncWorkerContext = {
+        client: createMockClient(),
+        messagesCache: createMessagesCache(db),
+        chatSyncState: createChatSyncStateService(db),
+        jobsService: createSyncJobsService(db),
         rateLimits,
-        config: { apiMethod: 'messages.getHistory' },
         chatsCache: createChatsCache(db),
-      } as any
+        config: { apiMethod: 'messages.getHistory', batchSize: 1 },
+      }
 
       expect(canMakeApiCall(ctx)).toBe(true)
       recordApiCall(ctx)
@@ -184,11 +261,15 @@ describe('sync-worker real helpers/context', () => {
 
     it('returns wait time when blocked and resolves flood waits', () => {
       const rateLimits = createRateLimitsService(db)
-      const ctx = {
+      const ctx: RealSyncWorkerContext = {
+        client: createMockClient(),
+        messagesCache: createMessagesCache(db),
+        chatSyncState: createChatSyncStateService(db),
+        jobsService: createSyncJobsService(db),
         rateLimits,
-        config: { apiMethod: 'messages.getHistory' },
         chatsCache: createChatsCache(db),
-      } as any
+        config: { apiMethod: 'messages.getHistory', batchSize: 1 },
+      }
 
       rateLimits.setFloodWait('messages.getHistory', 10)
       expect(getWaitTime(ctx)).toBeGreaterThan(0)
@@ -200,11 +281,15 @@ describe('sync-worker real helpers/context', () => {
 
     it('returns null when no flood wait is detected', () => {
       const rateLimits = createRateLimitsService(db)
-      const ctx = {
+      const ctx: RealSyncWorkerContext = {
+        client: createMockClient(),
+        messagesCache: createMessagesCache(db),
+        chatSyncState: createChatSyncStateService(db),
+        jobsService: createSyncJobsService(db),
         rateLimits,
-        config: { apiMethod: 'messages.getHistory' },
         chatsCache: createChatsCache(db),
-      } as any
+        config: { apiMethod: 'messages.getHistory', batchSize: 1 },
+      }
 
       const result = resolveFloodWaitResult(ctx, new Error('OTHER'))
       expect(result).toBeNull()
@@ -212,15 +297,19 @@ describe('sync-worker real helpers/context', () => {
 
     it('delegates getInputPeer to buildInputPeer', () => {
       const chatsCache = createChatsCache(db)
-      const ctx = {
-        chatsCache,
+      const ctx: RealSyncWorkerContext = {
+        client: createMockClient(),
+        messagesCache: createMessagesCache(db),
+        chatSyncState: createChatSyncStateService(db),
+        jobsService: createSyncJobsService(db),
         rateLimits: createRateLimitsService(db),
-        config: { apiMethod: 'messages.getHistory' },
-      } as any
+        chatsCache,
+        config: { apiMethod: 'messages.getHistory', batchSize: 1 },
+      }
 
       const inputPeer = getInputPeer(ctx, 77)
-      expect(inputPeer?._).toBe('inputPeerUser')
-      expect(inputPeer?.userId).toBe(77)
+      assertInputPeerUser(inputPeer)
+      expect(inputPeer.userId).toBe(77)
     })
   })
 })

@@ -19,6 +19,8 @@ import { resetOutputWriter, setOutputWriter } from '../utils/output'
 
 let testCacheDb: Database
 
+type CommandRun = (input: { args: Record<string, unknown> }) => Promise<void>
+
 mock.module('../db', () => ({
   getCacheDb: () => testCacheDb,
 }))
@@ -73,7 +75,7 @@ describe('SQL Commands', () => {
   describe('sqlQueryCommand', () => {
     it('returns JSON output for valid query', async () => {
       const { sqlQueryCommand } = await import('../commands/sql/query')
-      const run = sqlQueryCommand.run as (input: { args: any }) => Promise<void>
+      const run = sqlQueryCommand.run as CommandRun
 
       await run({
         args: {
@@ -93,7 +95,7 @@ describe('SQL Commands', () => {
 
     it('prints CSV output when format=csv', async () => {
       const { sqlQueryCommand } = await import('../commands/sql/query')
-      const run = sqlQueryCommand.run as (input: { args: any }) => Promise<void>
+      const run = sqlQueryCommand.run as CommandRun
       const logSpy = spyOn(console, 'log').mockImplementation(() => {})
 
       await run({
@@ -114,7 +116,7 @@ describe('SQL Commands', () => {
 
     it('rejects missing query', async () => {
       const { sqlQueryCommand } = await import('../commands/sql/query')
-      const run = sqlQueryCommand.run as (input: { args: any }) => Promise<void>
+      const run = sqlQueryCommand.run as CommandRun
       await expectCommandError(
         run({ args: { _: [] } }),
         ErrorCodes.INVALID_ARGS,
@@ -123,7 +125,7 @@ describe('SQL Commands', () => {
 
     it('rejects invalid format', async () => {
       const { sqlQueryCommand } = await import('../commands/sql/query')
-      const run = sqlQueryCommand.run as (input: { args: any }) => Promise<void>
+      const run = sqlQueryCommand.run as CommandRun
       await expectCommandError(
         run({
           args: { query: 'SELECT 1', format: 'xml', limit: '10', _: [] },
@@ -134,7 +136,7 @@ describe('SQL Commands', () => {
 
     it('rejects invalid limit', async () => {
       const { sqlQueryCommand } = await import('../commands/sql/query')
-      const run = sqlQueryCommand.run as (input: { args: any }) => Promise<void>
+      const run = sqlQueryCommand.run as CommandRun
       await expectCommandError(
         run({
           args: { query: 'SELECT 1', format: 'json', limit: '-1', _: [] },
@@ -145,7 +147,7 @@ describe('SQL Commands', () => {
 
     it('rejects write queries', async () => {
       const { sqlQueryCommand } = await import('../commands/sql/query')
-      const run = sqlQueryCommand.run as (input: { args: any }) => Promise<void>
+      const run = sqlQueryCommand.run as CommandRun
       await expectCommandError(
         run({
           args: { query: 'DELETE FROM users_cache', format: 'json', _: [] },
@@ -156,7 +158,7 @@ describe('SQL Commands', () => {
 
     it('reports syntax errors', async () => {
       const { sqlQueryCommand } = await import('../commands/sql/query')
-      const run = sqlQueryCommand.run as (input: { args: any }) => Promise<void>
+      const run = sqlQueryCommand.run as CommandRun
       await expectCommandError(
         run({
           args: {
@@ -171,7 +173,7 @@ describe('SQL Commands', () => {
 
     it('reports missing tables', async () => {
       const { sqlQueryCommand } = await import('../commands/sql/query')
-      const run = sqlQueryCommand.run as (input: { args: any }) => Promise<void>
+      const run = sqlQueryCommand.run as CommandRun
       await expectCommandError(
         run({
           args: {
@@ -190,9 +192,7 @@ describe('SQL Commands', () => {
       const { printSchemaCommand } = await import(
         '../commands/sql/print-schema'
       )
-      const run = printSchemaCommand.run as (input: {
-        args: any
-      }) => Promise<void>
+      const run = printSchemaCommand.run as CommandRun
 
       await run({
         args: { table: 'users_cache', format: 'json', _: [] },
@@ -208,9 +208,7 @@ describe('SQL Commands', () => {
       const { printSchemaCommand } = await import(
         '../commands/sql/print-schema'
       )
-      const run = printSchemaCommand.run as (input: {
-        args: any
-      }) => Promise<void>
+      const run = printSchemaCommand.run as CommandRun
       const logSpy = spyOn(console, 'log').mockImplementation(() => {})
 
       await run({
@@ -228,9 +226,7 @@ describe('SQL Commands', () => {
       const { printSchemaCommand } = await import(
         '../commands/sql/print-schema'
       )
-      const run = printSchemaCommand.run as (input: {
-        args: any
-      }) => Promise<void>
+      const run = printSchemaCommand.run as CommandRun
       await expectCommandError(
         run({
           args: { table: 'users_cache', format: 'yaml', _: [] },
@@ -243,9 +239,7 @@ describe('SQL Commands', () => {
       const { printSchemaCommand } = await import(
         '../commands/sql/print-schema'
       )
-      const run = printSchemaCommand.run as (input: {
-        args: any
-      }) => Promise<void>
+      const run = printSchemaCommand.run as CommandRun
       await expectCommandError(
         run({
           args: { table: 'unknown_table', format: 'json', _: [] },

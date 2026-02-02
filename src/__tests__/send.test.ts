@@ -12,13 +12,61 @@
 
 import type { Database } from 'bun:sqlite'
 import { beforeEach, describe, expect, it, mock } from 'bun:test'
+import type { TelegramClient } from '@mtcute/bun'
+import type { tl } from '@mtcute/tl'
 
-type AnyMockFn = ReturnType<typeof mock<(...args: any[]) => any>>
+type MockCall = <T extends tl.RpcMethod>(
+  request: T,
+) => Promise<tl.RpcCallReturn[T['_']]>
+
+type MockClient = {
+  call: MockCall
+  getMe: TelegramClient['getMe']
+}
 
 import { type ChatsCache, createChatsCache } from '../db/chats-cache'
 import { createTestCacheDatabase } from '../db/schema'
 import type { ChatType } from '../db/types'
 import { createUsersCache, type UsersCache } from '../db/users-cache'
+import { toLong } from '../utils/long'
+
+function expectLongEqual(actual: tl.Long, expected: string | number | bigint) {
+  expect(actual.toString()).toBe(toLong(expected).toString())
+}
+
+type UserResult = Awaited<ReturnType<TelegramClient['getMe']>>
+
+const createUser = (overrides: Partial<UserResult> = {}): UserResult =>
+  ({
+    id: 123,
+    firstName: 'Test',
+    username: 'test',
+    ...overrides,
+  }) as UserResult
+
+function assertInputPeerUser(
+  peer: tl.TypeInputPeer,
+): asserts peer is tl.RawInputPeerUser {
+  if (peer._ !== 'inputPeerUser') {
+    throw new Error(`Expected inputPeerUser, got ${peer._}`)
+  }
+}
+
+function assertInputPeerChat(
+  peer: tl.TypeInputPeer,
+): asserts peer is tl.RawInputPeerChat {
+  if (peer._ !== 'inputPeerChat') {
+    throw new Error(`Expected inputPeerChat, got ${peer._}`)
+  }
+}
+
+function assertInputPeerChannel(
+  peer: tl.TypeInputPeer,
+): asserts peer is tl.RawInputPeerChannel {
+  if (peer._ !== 'inputPeerChannel') {
+    throw new Error(`Expected inputPeerChannel, got ${peer._}`)
+  }
+}
 
 // =============================================================================
 // Test Helpers
@@ -68,26 +116,38 @@ function createTestChat(overrides = {}) {
 /**
  * Create a mock Telegram client
  */
-function createMockClient(overrides: Record<string, AnyMockFn> = {}) {
-  return {
-    call: mock((_request: any) => Promise.resolve({})),
-    getMe: mock(() =>
-      Promise.resolve({ id: 123, firstName: 'Test', username: 'test' }),
+function createMockClient(overrides: Partial<MockClient> = {}) {
+  const client = {
+    call: mock<MockCall>(async () => {
+      throw new Error('Unexpected API call')
+    }),
+    getMe: mock<TelegramClient['getMe']>(async () =>
+      createUser({
+        id: 123,
+        firstName: 'Test',
+        username: 'test',
+      }),
     ),
     ...overrides,
-  }
+  } satisfies MockClient
+
+  return client
 }
 
 /**
  * Peer resolution logic extracted for testing
  * (mirrors the logic in send.ts resolvePeer function)
  */
+function isRawUser(user: tl.TypeUser): user is tl.RawUser {
+  return user._ === 'user'
+}
+
 async function resolvePeer(
-  client: any,
+  client: Pick<MockClient, 'call'>,
   identifier: string,
   usersCache: UsersCache,
   chatsCache: ChatsCache,
-): Promise<{ inputPeer: any; name: string }> {
+): Promise<{ inputPeer: tl.TypeInputPeer; name: string }> {
   // Check if it's a username
   if (identifier.startsWith('@')) {
     const username = identifier.slice(1)
@@ -99,7 +159,7 @@ async function resolvePeer(
         inputPeer: {
           _: 'inputPeerUser',
           userId: Number(cachedUser.user_id),
-          accessHash: BigInt(cachedUser.access_hash),
+          accessHash: toLong(cachedUser.access_hash),
         },
         name: cachedUser.display_name || `@${username}`,
       }
@@ -113,7 +173,7 @@ async function resolvePeer(
           inputPeer: {
             _: 'inputPeerChannel',
             channelId: Number(cachedChat.chat_id),
-            accessHash: BigInt(cachedChat.access_hash),
+            accessHash: toLong(cachedChat.access_hash),
           },
           name: cachedChat.title || `@${username}`,
         }
@@ -121,18 +181,19 @@ async function resolvePeer(
     }
 
     // Resolve via API
-    const resolved = await client.call({
+    const request: tl.contacts.RawResolveUsernameRequest = {
       _: 'contacts.resolveUsername',
       username,
-    } as any)
+    }
+    const resolved = await client.call(request)
 
-    if (resolved.users && resolved.users.length > 0) {
-      const user = resolved.users[0]
+    const user = resolved.users?.find(isRawUser)
+    if (user) {
       return {
         inputPeer: {
           _: 'inputPeerUser',
           userId: user.id,
-          accessHash: BigInt(user.accessHash || 0),
+          accessHash: toLong(user.accessHash),
         },
         name:
           [user.firstName, user.lastName].filter(Boolean).join(' ') ||
@@ -140,13 +201,22 @@ async function resolvePeer(
       }
     }
 
-    if (resolved.chats && resolved.chats.length > 0) {
-      const chat = resolved.chats[0]
+    const chat = resolved.chats?.[0]
+    if (chat && (chat._ === 'channel' || chat._ === 'channelForbidden')) {
       return {
         inputPeer: {
           _: 'inputPeerChannel',
           channelId: chat.id,
-          accessHash: BigInt(chat.accessHash || 0),
+          accessHash: toLong(chat.accessHash),
+        },
+        name: chat.title || `@${username}`,
+      }
+    }
+    if (chat && (chat._ === 'chat' || chat._ === 'chatForbidden')) {
+      return {
+        inputPeer: {
+          _: 'inputPeerChat',
+          chatId: chat.id,
         },
         name: chat.title || `@${username}`,
       }
@@ -166,7 +236,7 @@ async function resolvePeer(
         inputPeer: {
           _: 'inputPeerUser',
           userId: Number(cachedUser.user_id),
-          accessHash: BigInt(cachedUser.access_hash),
+          accessHash: toLong(cachedUser.access_hash),
         },
         name: cachedUser.display_name || identifier,
       }
@@ -174,18 +244,18 @@ async function resolvePeer(
 
     // Try to resolve via contacts.resolvePhone
     try {
-      const resolved = await client.call({
+      const request: tl.contacts.RawResolvePhoneRequest = {
         _: 'contacts.resolvePhone',
         phone,
-      } as any)
-
-      if (resolved.users && resolved.users.length > 0) {
-        const user = resolved.users[0]
+      }
+      const resolved = await client.call(request)
+      const user = resolved.users?.find(isRawUser)
+      if (user) {
         return {
           inputPeer: {
             _: 'inputPeerUser',
             userId: user.id,
-            accessHash: BigInt(user.accessHash || 0),
+            accessHash: toLong(user.accessHash),
           },
           name:
             [user.firstName, user.lastName].filter(Boolean).join(' ') ||
@@ -212,7 +282,7 @@ async function resolvePeer(
       inputPeer: {
         _: 'inputPeerUser',
         userId: numericId,
-        accessHash: BigInt(cachedUser.access_hash),
+        accessHash: toLong(cachedUser.access_hash),
       },
       name: cachedUser.display_name || `User ${numericId}`,
     }
@@ -226,7 +296,7 @@ async function resolvePeer(
         inputPeer: {
           _: 'inputPeerUser',
           userId: numericId,
-          accessHash: BigInt(cachedChat.access_hash || 0),
+          accessHash: toLong(cachedChat.access_hash),
         },
         name: cachedChat.title || `User ${numericId}`,
       }
@@ -245,7 +315,7 @@ async function resolvePeer(
       inputPeer: {
         _: 'inputPeerChannel',
         channelId: numericId,
-        accessHash: BigInt(cachedChat.access_hash || 0),
+        accessHash: toLong(cachedChat.access_hash),
       },
       name: cachedChat.title || `Channel ${numericId}`,
     }
@@ -297,9 +367,9 @@ describe('Peer Resolution - By Username', () => {
         chatsCache,
       )
 
-      expect(result.inputPeer._).toBe('inputPeerUser')
+      assertInputPeerUser(result.inputPeer)
       expect(result.inputPeer.userId).toBe(111)
-      expect(result.inputPeer.accessHash).toBe(BigInt('123456789'))
+      expectLongEqual(result.inputPeer.accessHash, '123456789')
       expect(result.name).toBe('Alice Smith')
       // API should not be called when found in cache
       expect(mockClient.call).not.toHaveBeenCalled()
@@ -370,9 +440,9 @@ describe('Peer Resolution - By Username', () => {
         chatsCache,
       )
 
-      expect(result.inputPeer._).toBe('inputPeerChannel')
+      assertInputPeerChannel(result.inputPeer)
       expect(result.inputPeer.channelId).toBe(444)
-      expect(result.inputPeer.accessHash).toBe(BigInt('555666777'))
+      expectLongEqual(result.inputPeer.accessHash, '555666777')
       expect(result.name).toBe('News Channel')
       expect(mockClient.call).not.toHaveBeenCalled()
     })
@@ -396,7 +466,7 @@ describe('Peer Resolution - By Username', () => {
         chatsCache,
       )
 
-      expect(result.inputPeer._).toBe('inputPeerChannel')
+      assertInputPeerChannel(result.inputPeer)
       expect(result.inputPeer.channelId).toBe(555)
       expect(result.name).toBe('Community Group')
     })
@@ -414,12 +484,30 @@ describe('Peer Resolution - By Username', () => {
       )
 
       const mockClient = createMockClient({
-        call: mock((_req: any) =>
-          Promise.resolve({
+        call: mock<MockCall>(async (request) => {
+          if (request._ !== 'contacts.resolveUsername') {
+            throw new Error('Unexpected API call')
+          }
+
+          const result: tl.contacts.RawResolvedPeer = {
+            _: 'contacts.resolvedPeer',
+            peer: { _: 'peerChat', chatId: 666 },
             users: [],
-            chats: [{ id: 666, title: 'Regular Group', accessHash: '123' }],
-          }),
-        ),
+            chats: [
+              {
+                _: 'chat',
+                id: 666,
+                title: 'Regular Group',
+                participantsCount: 10,
+                photo: { _: 'chatPhotoEmpty' },
+                date: Math.floor(Date.now() / 1000),
+                version: 1,
+              },
+            ],
+          }
+
+          return result
+        }),
       })
 
       await resolvePeer(mockClient, '@regulargroup', usersCache, chatsCache)
@@ -432,19 +520,28 @@ describe('Peer Resolution - By Username', () => {
   describe('API resolution fallback', () => {
     it('should resolve username via API when not in cache', async () => {
       const mockClient = createMockClient({
-        call: mock((_req: any) =>
-          Promise.resolve({
+        call: mock<MockCall>(async (request) => {
+          if (request._ !== 'contacts.resolveUsername') {
+            throw new Error('Unexpected API call')
+          }
+
+          const result: tl.contacts.RawResolvedPeer = {
+            _: 'contacts.resolvedPeer',
+            peer: { _: 'peerUser', userId: 777 },
             users: [
               {
+                _: 'user',
                 id: 777,
                 firstName: 'John',
                 lastName: 'Doe',
-                accessHash: '111222333444',
+                accessHash: toLong('111222333444'),
               },
             ],
             chats: [],
-          }),
-        ),
+          }
+
+          return result
+        }),
       })
 
       const result = await resolvePeer(
@@ -458,25 +555,36 @@ describe('Peer Resolution - By Username', () => {
         _: 'contacts.resolveUsername',
         username: 'johndoe',
       })
-      expect(result.inputPeer._).toBe('inputPeerUser')
+      assertInputPeerUser(result.inputPeer)
       expect(result.inputPeer.userId).toBe(777)
       expect(result.name).toBe('John Doe')
     })
 
     it('should resolve channel via API when not in cache', async () => {
       const mockClient = createMockClient({
-        call: mock((_req: any) =>
-          Promise.resolve({
+        call: mock<MockCall>(async (request) => {
+          if (request._ !== 'contacts.resolveUsername') {
+            throw new Error('Unexpected API call')
+          }
+
+          const result: tl.contacts.RawResolvedPeer = {
+            _: 'contacts.resolvedPeer',
+            peer: { _: 'peerChannel', channelId: 888 },
             users: [],
             chats: [
               {
+                _: 'channel',
                 id: 888,
                 title: 'Tech Channel',
-                accessHash: '444555666777',
+                accessHash: toLong('444555666777'),
+                photo: { _: 'chatPhotoEmpty' },
+                date: Math.floor(Date.now() / 1000),
               },
             ],
-          }),
-        ),
+          }
+
+          return result
+        }),
       })
 
       const result = await resolvePeer(
@@ -486,19 +594,27 @@ describe('Peer Resolution - By Username', () => {
         chatsCache,
       )
 
-      expect(result.inputPeer._).toBe('inputPeerChannel')
+      assertInputPeerChannel(result.inputPeer)
       expect(result.inputPeer.channelId).toBe(888)
       expect(result.name).toBe('Tech Channel')
     })
 
     it('should throw error when username cannot be resolved', async () => {
       const mockClient = createMockClient({
-        call: mock((_req: any) =>
-          Promise.resolve({
+        call: mock<MockCall>(async (request) => {
+          if (request._ !== 'contacts.resolveUsername') {
+            throw new Error('Unexpected API call')
+          }
+
+          const result: tl.contacts.RawResolvedPeer = {
+            _: 'contacts.resolvedPeer',
+            peer: { _: 'peerUser', userId: 0 },
             users: [],
             chats: [],
-          }),
-        ),
+          }
+
+          return result
+        }),
       })
 
       await expect(
@@ -508,19 +624,28 @@ describe('Peer Resolution - By Username', () => {
 
     it('should handle API returning user with no accessHash', async () => {
       const mockClient = createMockClient({
-        call: mock((_req: any) =>
-          Promise.resolve({
+        call: mock<MockCall>(async (request) => {
+          if (request._ !== 'contacts.resolveUsername') {
+            throw new Error('Unexpected API call')
+          }
+
+          const result: tl.contacts.RawResolvedPeer = {
+            _: 'contacts.resolvedPeer',
+            peer: { _: 'peerUser', userId: 999 },
             users: [
               {
+                _: 'user',
                 id: 999,
                 firstName: 'No',
                 lastName: 'Hash',
-                accessHash: null, // Some users might not have accessHash
+                accessHash: undefined,
               },
             ],
             chats: [],
-          }),
-        ),
+          }
+
+          return result
+        }),
       })
 
       const result = await resolvePeer(
@@ -531,7 +656,8 @@ describe('Peer Resolution - By Username', () => {
       )
 
       // Should use 0n for missing accessHash
-      expect(result.inputPeer.accessHash).toBe(BigInt(0))
+      assertInputPeerUser(result.inputPeer)
+      expectLongEqual(result.inputPeer.accessHash, 0)
       expect(result.name).toBe('No Hash')
     })
   })
@@ -571,7 +697,7 @@ describe('Peer Resolution - By Phone Number', () => {
         chatsCache,
       )
 
-      expect(result.inputPeer._).toBe('inputPeerUser')
+      assertInputPeerUser(result.inputPeer)
       expect(result.inputPeer.userId).toBe(111)
     })
 
@@ -592,7 +718,7 @@ describe('Peer Resolution - By Phone Number', () => {
         chatsCache,
       )
 
-      expect(result.inputPeer._).toBe('inputPeerUser')
+      assertInputPeerUser(result.inputPeer)
       expect(result.inputPeer.userId).toBe(222)
     })
   })
@@ -617,9 +743,9 @@ describe('Peer Resolution - By Phone Number', () => {
         chatsCache,
       )
 
-      expect(result.inputPeer._).toBe('inputPeerUser')
+      assertInputPeerUser(result.inputPeer)
       expect(result.inputPeer.userId).toBe(333)
-      expect(result.inputPeer.accessHash).toBe(BigInt('111222333'))
+      expectLongEqual(result.inputPeer.accessHash, '111222333')
       expect(result.name).toBe('Phone User')
       expect(mockClient.call).not.toHaveBeenCalled()
     })
@@ -642,6 +768,7 @@ describe('Peer Resolution - By Phone Number', () => {
         usersCache,
         chatsCache,
       )
+      assertInputPeerUser(result1.inputPeer)
       expect(result1.inputPeer.userId).toBe(444)
 
       const result2 = await resolvePeer(
@@ -650,6 +777,7 @@ describe('Peer Resolution - By Phone Number', () => {
         usersCache,
         chatsCache,
       )
+      assertInputPeerUser(result2.inputPeer)
       expect(result2.inputPeer.userId).toBe(444)
 
       // Test with raw digits (no + prefix)
@@ -659,6 +787,7 @@ describe('Peer Resolution - By Phone Number', () => {
         usersCache,
         chatsCache,
       )
+      assertInputPeerUser(result3.inputPeer)
       expect(result3.inputPeer.userId).toBe(444)
     })
   })
@@ -666,18 +795,28 @@ describe('Peer Resolution - By Phone Number', () => {
   describe('API resolution fallback', () => {
     it('should resolve phone via API when not in cache', async () => {
       const mockClient = createMockClient({
-        call: mock((_req: any) =>
-          Promise.resolve({
+        call: mock<MockCall>(async (request) => {
+          if (request._ !== 'contacts.resolvePhone') {
+            throw new Error('Unexpected API call')
+          }
+
+          const result: tl.contacts.RawResolvedPeer = {
+            _: 'contacts.resolvedPeer',
+            peer: { _: 'peerUser', userId: 555 },
             users: [
               {
+                _: 'user',
                 id: 555,
                 firstName: 'API',
                 lastName: 'User',
-                accessHash: '777888999',
+                accessHash: toLong('777888999'),
               },
             ],
-          }),
-        ),
+            chats: [],
+          }
+
+          return result
+        }),
       })
 
       const result = await resolvePeer(
@@ -691,14 +830,19 @@ describe('Peer Resolution - By Phone Number', () => {
         _: 'contacts.resolvePhone',
         phone: '11234567890',
       })
-      expect(result.inputPeer._).toBe('inputPeerUser')
+      assertInputPeerUser(result.inputPeer)
       expect(result.inputPeer.userId).toBe(555)
       expect(result.name).toBe('API User')
     })
 
     it('should throw error when phone cannot be resolved', async () => {
       const mockClient = createMockClient({
-        call: mock((_req: any) => Promise.reject(new Error('PHONE_NOT_FOUND'))),
+        call: mock<MockCall>(async (request) => {
+          if (request._ !== 'contacts.resolvePhone') {
+            throw new Error('Unexpected API call')
+          }
+          throw new Error('PHONE_NOT_FOUND')
+        }),
       })
 
       await expect(
@@ -708,11 +852,20 @@ describe('Peer Resolution - By Phone Number', () => {
 
     it('should throw when API returns no users', async () => {
       const mockClient = createMockClient({
-        call: mock((_req: any) =>
-          Promise.resolve({
+        call: mock<MockCall>(async (request) => {
+          if (request._ !== 'contacts.resolvePhone') {
+            throw new Error('Unexpected API call')
+          }
+
+          const result: tl.contacts.RawResolvedPeer = {
+            _: 'contacts.resolvedPeer',
+            peer: { _: 'peerUser', userId: 0 },
             users: [],
-          }),
-        ),
+            chats: [],
+          }
+
+          return result
+        }),
       })
 
       await expect(
@@ -757,9 +910,9 @@ describe('Peer Resolution - By Numeric ID', () => {
         chatsCache,
       )
 
-      expect(result.inputPeer._).toBe('inputPeerUser')
+      assertInputPeerUser(result.inputPeer)
       expect(result.inputPeer.userId).toBe(123456789)
-      expect(result.inputPeer.accessHash).toBe(BigInt('999888777'))
+      expectLongEqual(result.inputPeer.accessHash, '999888777')
       expect(result.name).toBe('Numeric User')
     })
 
@@ -804,7 +957,7 @@ describe('Peer Resolution - By Numeric ID', () => {
         chatsCache,
       )
 
-      expect(result.inputPeer._).toBe('inputPeerUser')
+      assertInputPeerUser(result.inputPeer)
       expect(result.inputPeer.userId).toBe(555666)
       expect(result.name).toBe('Private Chat')
     })
@@ -827,7 +980,7 @@ describe('Peer Resolution - By Numeric ID', () => {
         chatsCache,
       )
 
-      expect(result.inputPeer._).toBe('inputPeerChat')
+      assertInputPeerChat(result.inputPeer)
       expect(result.inputPeer.chatId).toBe(777888)
       expect(result.name).toBe('Group Chat')
     })
@@ -850,9 +1003,9 @@ describe('Peer Resolution - By Numeric ID', () => {
         chatsCache,
       )
 
-      expect(result.inputPeer._).toBe('inputPeerChannel')
+      assertInputPeerChannel(result.inputPeer)
       expect(result.inputPeer.channelId).toBe(888999)
-      expect(result.inputPeer.accessHash).toBe(BigInt('111222333'))
+      expectLongEqual(result.inputPeer.accessHash, '111222333')
       expect(result.name).toBe('My Channel')
     })
 
@@ -874,7 +1027,7 @@ describe('Peer Resolution - By Numeric ID', () => {
         chatsCache,
       )
 
-      expect(result.inputPeer._).toBe('inputPeerChannel')
+      assertInputPeerChannel(result.inputPeer)
       expect(result.inputPeer.channelId).toBe(999000)
       expect(result.name).toBe('Supergroup')
     })
@@ -891,7 +1044,7 @@ describe('Peer Resolution - By Numeric ID', () => {
         chatsCache,
       )
 
-      expect(result.inputPeer._).toBe('inputPeerChat')
+      assertInputPeerChat(result.inputPeer)
       expect(result.inputPeer.chatId).toBe(12345)
       expect(result.name).toBe('Chat 12345')
     })
@@ -933,13 +1086,24 @@ describe('Message Sending', () => {
       )
 
       const mockClient = createMockClient({
-        call: mock((_req: any) =>
-          Promise.resolve({
+        call: mock<MockCall>(async (request) => {
+          if (request._ !== 'messages.sendMessage') {
+            throw new Error('Unexpected API call')
+          }
+
+          const result: tl.RawUpdateShortSentMessage = {
             _: 'updateShortSentMessage',
             id: 12345,
             date: Math.floor(Date.now() / 1000),
-          }),
-        ),
+            pts: 1,
+            ptsCount: 1,
+            out: true,
+            media: undefined,
+            entities: undefined,
+          }
+
+          return result
+        }),
       })
 
       const { inputPeer } = await resolvePeer(
@@ -950,11 +1114,11 @@ describe('Message Sending', () => {
       )
 
       // Build the request as the send command would
-      const request = {
+      const request: tl.messages.RawSendMessageRequest = {
         _: 'messages.sendMessage',
         peer: inputPeer,
         message: 'Hello, world!',
-        randomId: BigInt(123456),
+        randomId: toLong(123456),
         noWebpage: false,
         silent: false,
       }
@@ -980,13 +1144,24 @@ describe('Message Sending', () => {
       )
 
       const mockClient = createMockClient({
-        call: mock((_req: any) =>
-          Promise.resolve({
+        call: mock<MockCall>(async (request) => {
+          if (request._ !== 'messages.sendMessage') {
+            throw new Error('Unexpected API call')
+          }
+
+          const result: tl.RawUpdateShortSentMessage = {
             _: 'updateShortSentMessage',
             id: 12346,
             date: Math.floor(Date.now() / 1000),
-          }),
-        ),
+            pts: 1,
+            ptsCount: 1,
+            out: true,
+            media: undefined,
+            entities: undefined,
+          }
+
+          return result
+        }),
       })
 
       const { inputPeer } = await resolvePeer(
@@ -996,11 +1171,11 @@ describe('Message Sending', () => {
         chatsCache,
       )
 
-      const request = {
+      const request: tl.messages.RawSendMessageRequest = {
         _: 'messages.sendMessage',
         peer: inputPeer,
         message: 'Silent message',
-        randomId: BigInt(123457),
+        randomId: toLong(123457),
         noWebpage: false,
         silent: true, // Silent flag enabled
       }
@@ -1025,13 +1200,24 @@ describe('Message Sending', () => {
       )
 
       const mockClient = createMockClient({
-        call: mock((_req: any) =>
-          Promise.resolve({
+        call: mock<MockCall>(async (request) => {
+          if (request._ !== 'messages.sendMessage') {
+            throw new Error('Unexpected API call')
+          }
+
+          const result: tl.RawUpdateShortSentMessage = {
             _: 'updateShortSentMessage',
             id: 12347,
             date: Math.floor(Date.now() / 1000),
-          }),
-        ),
+            pts: 1,
+            ptsCount: 1,
+            out: true,
+            media: undefined,
+            entities: undefined,
+          }
+
+          return result
+        }),
       })
 
       const { inputPeer } = await resolvePeer(
@@ -1041,11 +1227,11 @@ describe('Message Sending', () => {
         chatsCache,
       )
 
-      const request: any = {
+      const request: tl.messages.RawSendMessageRequest = {
         _: 'messages.sendMessage',
         peer: inputPeer,
         message: 'Reply message',
-        randomId: BigInt(123458),
+        randomId: toLong(123458),
         noWebpage: false,
         silent: false,
         replyTo: {
@@ -1114,7 +1300,11 @@ describe('Message Sending', () => {
           update._ === 'updateNewMessage' ||
           update._ === 'updateNewChannelMessage'
         ) {
-          messageId = (update as any).id ?? (update as any).message?.id
+          if (update._ === 'updateMessageID') {
+            messageId = update.id ?? null
+          } else {
+            messageId = update.message?.id ?? null
+          }
           break
         }
       }
@@ -1152,12 +1342,20 @@ describe('Error Handling', () => {
 
     it('should throw when username resolution fails', async () => {
       const mockClient = createMockClient({
-        call: mock((_req: any) =>
-          Promise.resolve({
+        call: mock<MockCall>(async (request) => {
+          if (request._ !== 'contacts.resolveUsername') {
+            throw new Error('Unexpected API call')
+          }
+
+          const result: tl.contacts.RawResolvedPeer = {
+            _: 'contacts.resolvedPeer',
+            peer: { _: 'peerUser', userId: 0 },
             users: [],
             chats: [],
-          }),
-        ),
+          }
+
+          return result
+        }),
       })
 
       await expect(
@@ -1167,9 +1365,12 @@ describe('Error Handling', () => {
 
     it('should throw when phone resolution fails', async () => {
       const mockClient = createMockClient({
-        call: mock((_req: any) =>
-          Promise.reject(new Error('PHONE_NOT_OCCUPIED')),
-        ),
+        call: mock<MockCall>(async (request) => {
+          if (request._ !== 'contacts.resolvePhone') {
+            throw new Error('Unexpected API call')
+          }
+          throw new Error('PHONE_NOT_OCCUPIED')
+        }),
       })
 
       await expect(
@@ -1206,19 +1407,28 @@ describe('Error Handling', () => {
       )
 
       const mockClient = createMockClient({
-        call: mock((_req: any) =>
-          Promise.resolve({
+        call: mock<MockCall>(async (request) => {
+          if (request._ !== 'contacts.resolveUsername') {
+            throw new Error('Unexpected API call')
+          }
+
+          const result: tl.contacts.RawResolvedPeer = {
+            _: 'contacts.resolvedPeer',
+            peer: { _: 'peerUser', userId: 111 },
             users: [
               {
+                _: 'user',
                 id: 111,
                 firstName: 'Has',
                 lastName: 'Access',
-                accessHash: '999',
+                accessHash: toLong('999'),
               },
             ],
             chats: [],
-          }),
-        ),
+          }
+
+          return result
+        }),
       })
 
       const result = await resolvePeer(
@@ -1230,7 +1440,8 @@ describe('Error Handling', () => {
 
       // Should have called API because cache entry has no access_hash
       expect(mockClient.call).toHaveBeenCalled()
-      expect(result.inputPeer.accessHash).toBe(BigInt('999'))
+      assertInputPeerUser(result.inputPeer)
+      expectLongEqual(result.inputPeer.accessHash, '999')
     })
 
     it('should skip cache entry without access_hash for phone lookup', async () => {
@@ -1243,18 +1454,28 @@ describe('Error Handling', () => {
       )
 
       const mockClient = createMockClient({
-        call: mock((_req: any) =>
-          Promise.resolve({
+        call: mock<MockCall>(async (request) => {
+          if (request._ !== 'contacts.resolvePhone') {
+            throw new Error('Unexpected API call')
+          }
+
+          const result: tl.contacts.RawResolvedPeer = {
+            _: 'contacts.resolvedPeer',
+            peer: { _: 'peerUser', userId: 222 },
             users: [
               {
+                _: 'user',
                 id: 222,
                 firstName: 'Phone',
                 lastName: 'User',
-                accessHash: '888',
+                accessHash: toLong('888'),
               },
             ],
-          }),
-        ),
+            chats: [],
+          }
+
+          return result
+        }),
       })
 
       const result = await resolvePeer(
@@ -1266,7 +1487,8 @@ describe('Error Handling', () => {
 
       // Should have called API because cache entry has no access_hash
       expect(mockClient.call).toHaveBeenCalled()
-      expect(result.inputPeer.accessHash).toBe(BigInt('888'))
+      assertInputPeerUser(result.inputPeer)
+      expectLongEqual(result.inputPeer.accessHash, '888')
     })
 
     it('should skip cache entry without access_hash for user ID lookup', async () => {
@@ -1286,7 +1508,7 @@ describe('Error Handling', () => {
       )
 
       // Falls back to inputPeerChat when user has no access_hash
-      expect(result.inputPeer._).toBe('inputPeerChat')
+      assertInputPeerChat(result.inputPeer)
       expect(result.inputPeer.chatId).toBe(333333)
     })
   })
@@ -1422,7 +1644,7 @@ describe('Resolution Priority', () => {
     )
 
     // Should resolve to user, not channel
-    expect(result.inputPeer._).toBe('inputPeerUser')
+    assertInputPeerUser(result.inputPeer)
     expect(result.inputPeer.userId).toBe(111)
   })
 
@@ -1446,7 +1668,7 @@ describe('Resolution Priority', () => {
     const result = await resolvePeer(mockClient, '555', usersCache, chatsCache)
 
     // Should resolve to user, not channel
-    expect(result.inputPeer._).toBe('inputPeerUser')
+    assertInputPeerUser(result.inputPeer)
     expect(result.inputPeer.userId).toBe(555)
   })
 
@@ -1468,12 +1690,20 @@ describe('Resolution Priority', () => {
     )
 
     const mockClient = createMockClient({
-      call: mock((_req: any) =>
-        Promise.resolve({
+      call: mock<MockCall>(async (request) => {
+        if (request._ !== 'contacts.resolveUsername') {
+          throw new Error('Unexpected API call')
+        }
+
+        const result: tl.contacts.RawResolvedPeer = {
+          _: 'contacts.resolvedPeer',
+          peer: { _: 'peerUser', userId: 0 },
           users: [],
           chats: [],
-        }),
-      ),
+        }
+
+        return result
+      }),
     })
 
     // When user has no access_hash, it should fall through to chats cache
@@ -1484,7 +1714,7 @@ describe('Resolution Priority', () => {
       chatsCache,
     )
 
-    expect(result.inputPeer._).toBe('inputPeerChannel')
+    assertInputPeerChannel(result.inputPeer)
     expect(result.inputPeer.channelId).toBe(777)
     expect(mockClient.call).not.toHaveBeenCalled()
   })

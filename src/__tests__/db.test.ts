@@ -125,6 +125,45 @@ describe('Database Module', () => {
     })
   })
 
+  describe('accountsDb.getByUsername', () => {
+    it('should return account by username (case-insensitive, @ optional)', () => {
+      const account = accountsDb.create({
+        phone: '+1234567890',
+        username: 'TestUser',
+      })
+
+      const found = accountsDb.getByUsername('@testuser')
+
+      expect(found?.id).toBe(account.id)
+    })
+
+    it('should return null for empty username', () => {
+      const found = accountsDb.getByUsername('   ')
+      expect(found).toBeNull()
+    })
+  })
+
+  describe('accountsDb.getAllByLabel', () => {
+    it('should return accounts by label', () => {
+      accountsDb.create({ phone: '+1111111111', label: 'Work' })
+      accountsDb.create({ phone: '+2222222222', label: 'Work' })
+      accountsDb.create({ phone: '+3333333333', label: 'Personal' })
+
+      const results = accountsDb.getAllByLabel('Work')
+
+      expect(results).toHaveLength(2)
+      expect(results.map((a) => a.phone)).toEqual([
+        '+1111111111',
+        '+2222222222',
+      ])
+    })
+
+    it('should return empty array for blank label', () => {
+      const results = accountsDb.getAllByLabel('   ')
+      expect(results).toEqual([])
+    })
+  })
+
   describe('accountsDb.getActive', () => {
     it('should return null when no active account', () => {
       accountsDb.create({ phone: '+1234567890', is_active: false })
@@ -199,6 +238,20 @@ describe('Database Module', () => {
       })
 
       expect(updated?.session_data).toBe('new-session')
+    })
+
+    it('should normalize username on update', () => {
+      const account = accountsDb.create({ phone: '+1234567890' })
+      const updated = accountsDb.update(account.id, { username: '@NewUser' })
+
+      expect(updated?.username).toBe('newuser')
+    })
+
+    it('should trim label on update', () => {
+      const account = accountsDb.create({ phone: '+1234567890' })
+      const updated = accountsDb.update(account.id, { label: '  Work  ' })
+
+      expect(updated?.label).toBe('Work')
     })
 
     it('should return null for non-existent ID', () => {

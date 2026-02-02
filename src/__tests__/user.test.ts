@@ -10,14 +10,47 @@
 
 import type { Database } from 'bun:sqlite'
 import { beforeEach, describe, expect, it, mock } from 'bun:test'
+import type { tl } from '@mtcute/tl'
 
 import { createTestCacheDatabase } from '../db/schema'
 import { getDefaultCacheConfig, isCacheStale } from '../db/types'
 import {
+  type CachedUser,
   createUsersCache,
   type UserCacheInput,
   type UsersCache,
 } from '../db/users-cache'
+import { toLong } from '../utils/long'
+
+function expectLongEqual(actual: tl.Long, expected: string | number | bigint) {
+  expect(actual.toString()).toBe(toLong(expected).toString())
+}
+
+function makeRawUser(overrides: Partial<tl.RawUser> = {}): tl.RawUser {
+  return {
+    _: 'user',
+    id: 1,
+    accessHash: toLong(0),
+    firstName: 'Test',
+    lastName: 'User',
+    username: 'testuser',
+    phone: '0000000000',
+    bot: false,
+    premium: false,
+    contact: false,
+    ...overrides,
+  }
+}
+
+function requireCachedUser(
+  value: CachedUser | null,
+  message = 'Expected cached user',
+): CachedUser {
+  if (!value) {
+    throw new Error(message)
+  }
+  return value
+}
 
 // =============================================================================
 // Note: We no longer mock the output module to avoid interfering with other tests.
@@ -74,30 +107,35 @@ function createTestUser(
 /**
  * Create a mock Telegram client
  */
-function createMockClient(overrides: Record<string, any> = {}) {
+function createMockClient(overrides: Record<string, unknown> = {}) {
+  const rawUser = makeRawUser({
+    id: 123,
+    firstName: 'Current',
+    lastName: 'User',
+    username: 'currentuser',
+    phone: '1111111111',
+    premium: true,
+    accessHash: toLong('999999999'),
+  })
+  const currentUser = { ...rawUser, raw: rawUser }
+
   return {
-    call: mock((_req: any) => Promise.resolve({})),
-    getMe: mock((_opts?: any) =>
-      Promise.resolve({
-        id: 123,
-        firstName: 'Current',
-        lastName: 'User',
-        username: 'currentuser',
-        phone: '1111111111',
-        bot: false,
-        premium: true,
-        contact: false,
-        accessHash: BigInt('999999999'),
-      }),
+    call: mock((_req: Record<string, unknown>) => Promise.resolve({})),
+    getMe: mock((_opts?: Record<string, unknown>) =>
+      Promise.resolve(currentUser),
     ),
     ...overrides,
   }
 }
 
+function isRawUser(user: tl.TypeUser): user is tl.RawUser {
+  return user._ === 'user'
+}
+
 /**
  * Convert API user to UserInfo (mirrors logic from user.ts)
  */
-function apiUserToUserInfo(user: any) {
+function apiUserToUserInfo(user: tl.RawUser) {
   return {
     id: user.id,
     firstName: user.firstName ?? '',
@@ -113,7 +151,7 @@ function apiUserToUserInfo(user: any) {
 /**
  * Convert cached user to UserInfo (mirrors logic from user.ts)
  */
-function cachedUserToUserInfo(cached: any) {
+function cachedUserToUserInfo(cached: CachedUser) {
   return {
     id: Number(cached.user_id),
     firstName: cached.first_name ?? '',
@@ -129,11 +167,11 @@ function cachedUserToUserInfo(cached: any) {
 /**
  * Convert API user to cache input (mirrors logic from user.ts)
  */
-function apiUserToCacheInput(user: any): UserCacheInput {
+function apiUserToCacheInput(user: tl.RawUser): UserCacheInput {
   // Create a copy without BigInt for JSON serialization
-  const rawData = { ...user }
-  if (rawData.accessHash !== undefined) {
-    rawData.accessHash = String(rawData.accessHash)
+  const rawData: Record<string, unknown> = { ...user }
+  if (user.accessHash !== undefined) {
+    rawData.accessHash = String(user.accessHash)
   }
 
   return {
@@ -200,16 +238,14 @@ describe('meCommand', () => {
     })
 
     it('should convert API user to UserInfo correctly', () => {
-      const apiUser = {
+      const apiUser = makeRawUser({
         id: 123,
         firstName: 'Current',
         lastName: 'User',
         username: 'currentuser',
         phone: '1111111111',
-        bot: false,
         premium: true,
-        contact: false,
-      }
+      })
 
       const userInfo = apiUserToUserInfo(apiUser)
 
@@ -273,11 +309,8 @@ describe('meCommand', () => {
         }),
       )
 
-      const cached = usersCache.getById('123')
-      const stale = isCacheStale(
-        cached!.fetched_at,
-        cacheConfig.staleness.peers,
-      )
+      const cached = requireCachedUser(usersCache.getById('123'))
+      const stale = isCacheStale(cached.fetched_at, cacheConfig.staleness.peers)
 
       expect(stale).toBe(true)
     })
@@ -290,11 +323,8 @@ describe('meCommand', () => {
         }),
       )
 
-      const cached = usersCache.getById('123')
-      const stale = isCacheStale(
-        cached!.fetched_at,
-        cacheConfig.staleness.peers,
-      )
+      const cached = requireCachedUser(usersCache.getById('123'))
+      const stale = isCacheStale(cached.fetched_at, cacheConfig.staleness.peers)
 
       expect(stale).toBe(false)
     })
@@ -323,11 +353,8 @@ describe('meCommand', () => {
         }),
       )
 
-      const cached = usersCache.getById('123')
-      const stale = isCacheStale(
-        cached!.fetched_at,
-        cacheConfig.staleness.peers,
-      )
+      const cached = requireCachedUser(usersCache.getById('123'))
+      const stale = isCacheStale(cached.fetched_at, cacheConfig.staleness.peers)
 
       const response = {
         user: cachedUserToUserInfo(cached),
@@ -425,7 +452,7 @@ describe('meCommand', () => {
   describe('error handling - auth required', () => {
     it('should handle getMe throwing unauthorized error', async () => {
       mockClient = createMockClient({
-        getMe: mock((_opts?: any) =>
+        getMe: mock((_opts?: Record<string, unknown>) =>
           Promise.reject(new Error('AUTH_KEY_UNREGISTERED')),
         ),
       })
@@ -443,7 +470,7 @@ describe('meCommand', () => {
 
     it('should catch generic errors from getMe', async () => {
       mockClient = createMockClient({
-        getMe: mock((_opts?: any) =>
+        getMe: mock((_opts?: Record<string, unknown>) =>
           Promise.reject(new Error('Network timeout')),
         ),
       })
@@ -474,7 +501,7 @@ describe('meCommand', () => {
         }),
       )
 
-      const cached = usersCache.getById('123')
+      const cached = requireCachedUser(usersCache.getById('123'))
       const userInfo = cachedUserToUserInfo(cached)
 
       expect(userInfo.id).toBe(123)
@@ -498,7 +525,7 @@ describe('meCommand', () => {
         }),
       )
 
-      const cached = usersCache.getById('456')
+      const cached = requireCachedUser(usersCache.getById('456'))
       const userInfo = cachedUserToUserInfo(cached)
 
       expect(userInfo.username).toBeNull()
@@ -507,15 +534,12 @@ describe('meCommand', () => {
     })
 
     it('should handle null first_name in API response', () => {
-      const apiUser = {
+      const apiUser = makeRawUser({
         id: 789,
-        firstName: null,
+        firstName: undefined,
         lastName: 'OnlyLast',
         username: 'onlylast',
-        bot: false,
-        premium: false,
-        contact: false,
-      }
+      })
 
       const userInfo = apiUserToUserInfo(apiUser)
 
@@ -650,7 +674,7 @@ describe('userCommand - by username', () => {
   describe('API resolution for username', () => {
     it('should resolve username via API when not in cache', async () => {
       mockClient = createMockClient({
-        call: mock((_req: any) =>
+        call: mock((_req: Record<string, unknown>) =>
           Promise.resolve({
             users: [
               {
@@ -659,7 +683,7 @@ describe('userCommand - by username', () => {
                 firstName: 'API',
                 lastName: 'User',
                 username: 'apiuser',
-                accessHash: BigInt('123456'),
+                accessHash: toLong('123456'),
               },
             ],
           }),
@@ -669,11 +693,16 @@ describe('userCommand - by username', () => {
       const result = (await mockClient.call({
         _: 'contacts.resolveUsername',
         username: 'apiuser',
-      })) as any
+      })) as { users: tl.TypeUser[] }
 
       expect(result.users).toHaveLength(1)
-      expect(result.users[0].id).toBe(444)
-      expect(result.users[0].firstName).toBe('API')
+      const user = result.users.find(isRawUser)
+      expect(user).toBeDefined()
+      if (!user) {
+        throw new Error('Expected RawUser in resolveUsername response')
+      }
+      expect(user.id).toBe(444)
+      expect(user.firstName).toBe('API')
     })
 
     it('should strip @ before API call', () => {
@@ -686,17 +715,13 @@ describe('userCommand - by username', () => {
     })
 
     it('should cache user after API resolution', async () => {
-      const apiUser = {
-        _: 'user',
+      const apiUser = makeRawUser({
         id: 555,
         firstName: 'Resolved',
         lastName: 'User',
         username: 'resolved',
-        accessHash: BigInt('789'),
-        bot: false,
-        premium: false,
-        contact: false,
-      }
+        accessHash: toLong('789'),
+      })
 
       usersCache.upsert(apiUserToCacheInput(apiUser))
 
@@ -724,7 +749,7 @@ describe('userCommand - by username', () => {
   describe('error handling - USERNAME_NOT_OCCUPIED', () => {
     it('should detect USERNAME_NOT_OCCUPIED error', async () => {
       mockClient = createMockClient({
-        call: mock((_req: any) =>
+        call: mock((_req: Record<string, unknown>) =>
           Promise.reject(new Error('USERNAME_NOT_OCCUPIED')),
         ),
       })
@@ -739,7 +764,7 @@ describe('userCommand - by username', () => {
 
     it('should handle user not in API response', async () => {
       mockClient = createMockClient({
-        call: mock((_req: any) =>
+        call: mock((_req: Record<string, unknown>) =>
           Promise.resolve({
             users: [],
           }),
@@ -749,7 +774,7 @@ describe('userCommand - by username', () => {
       const result = (await mockClient.call({
         _: 'contacts.resolveUsername',
         username: 'empty',
-      })) as any
+      })) as { users: tl.TypeUser[] }
 
       expect(result.users).toHaveLength(0)
     })
@@ -843,7 +868,7 @@ describe('userCommand - by ID', () => {
   describe('API resolution for ID', () => {
     it('should call users.getUsers with inputUser', async () => {
       mockClient = createMockClient({
-        call: mock((_req: any) =>
+        call: mock((_req: Record<string, unknown>) =>
           Promise.resolve([
             {
               _: 'user',
@@ -859,12 +884,15 @@ describe('userCommand - by ID', () => {
       const userId = Number.parseInt('666', 10)
       const result = (await mockClient.call({
         _: 'users.getUsers',
-        id: [{ _: 'inputUser', userId, accessHash: BigInt(0) }],
-      })) as any[]
+        id: [{ _: 'inputUser', userId, accessHash: toLong(0) }],
+      })) as tl.TypeUser[]
 
-      const user = result.find((u: any) => u._ === 'user')
+      const user = result.find(isRawUser)
 
       expect(user).toBeDefined()
+      if (!user) {
+        throw new Error('Expected RawUser from users.getUsers')
+      }
       expect(user.id).toBe(666)
     })
 
@@ -873,37 +901,37 @@ describe('userCommand - by ID', () => {
       const inputUser = {
         _: 'inputUser',
         userId,
-        accessHash: BigInt(0),
+        accessHash: toLong(0),
       }
 
       expect(inputUser.userId).toBe(12345)
-      expect(inputUser.accessHash).toBe(BigInt(0))
+      expectLongEqual(inputUser.accessHash, 0)
     })
 
     it('should filter user from result array', () => {
-      const result = [
-        { _: 'user', id: 111, firstName: 'User' },
+      const result: tl.TypeUser[] = [
+        makeRawUser({ id: 111, firstName: 'User' }),
         { _: 'userEmpty', id: 222 },
       ]
 
-      const user = result.find((u: any) => u._ === 'user')
+      const user = result.find(isRawUser)
 
       expect(user).toBeDefined()
       expect(user?.id).toBe(111)
     })
 
     it('should handle userEmpty in response', () => {
-      const result = [{ _: 'userEmpty', id: 333 }]
+      const result: tl.TypeUser[] = [{ _: 'userEmpty', id: 333 }]
 
-      const user = result.find((u: any) => u._ === 'user')
+      const user = result.find(isRawUser)
 
       expect(user).toBeUndefined()
     })
 
     it('should handle empty response array', () => {
-      const result: any[] = []
+      const result: tl.TypeUser[] = []
 
-      const user = result.find((u: any) => u._ === 'user')
+      const user = result.find(isRawUser)
 
       expect(user).toBeUndefined()
     })
@@ -1033,7 +1061,7 @@ describe('userCommand - by phone', () => {
   describe('API resolution for phone', () => {
     it('should call contacts.resolvePhone', async () => {
       mockClient = createMockClient({
-        call: mock((_req: any) =>
+        call: mock((_req: Record<string, unknown>) =>
           Promise.resolve({
             users: [
               {
@@ -1042,7 +1070,7 @@ describe('userCommand - by phone', () => {
                 firstName: 'Phone',
                 lastName: 'Resolved',
                 phone: '5551112222',
-                accessHash: BigInt('111222'),
+                accessHash: toLong('111222'),
               },
             ],
           }),
@@ -1053,10 +1081,15 @@ describe('userCommand - by phone', () => {
       const result = (await mockClient.call({
         _: 'contacts.resolvePhone',
         phone,
-      })) as any
+      })) as { users: tl.TypeUser[] }
 
       expect(result.users).toHaveLength(1)
-      expect(result.users[0].phone).toBe('5551112222')
+      const user = result.users.find(isRawUser)
+      expect(user).toBeDefined()
+      if (!user) {
+        throw new Error('Expected RawUser in resolvePhone response')
+      }
+      expect(user.phone).toBe('5551112222')
     })
 
     it('should build correct resolvePhone request', () => {
@@ -1076,7 +1109,7 @@ describe('userCommand - by phone', () => {
   describe('error handling - PHONE_NOT_OCCUPIED', () => {
     it('should detect PHONE_NOT_OCCUPIED error', async () => {
       mockClient = createMockClient({
-        call: mock((_req: any) =>
+        call: mock((_req: Record<string, unknown>) =>
           Promise.reject(new Error('PHONE_NOT_OCCUPIED')),
         ),
       })
@@ -1272,15 +1305,13 @@ describe('Cache vs API behavior', () => {
       )
 
       // Simulate API response
-      const apiUser = {
+      const apiUser = makeRawUser({
         id: 444,
         firstName: 'New',
         lastName: 'Name',
         username: 'updated',
-        bot: false,
         premium: true,
-        contact: false,
-      }
+      })
 
       usersCache.upsert(apiUserToCacheInput(apiUser))
 
@@ -1353,7 +1384,7 @@ describe('Error handling', () => {
   describe('auth required errors', () => {
     it('should detect AUTH_KEY_UNREGISTERED', async () => {
       mockClient = createMockClient({
-        getMe: mock((_opts?: any) =>
+        getMe: mock((_opts?: Record<string, unknown>) =>
           Promise.reject(new Error('AUTH_KEY_UNREGISTERED')),
         ),
       })
@@ -1361,8 +1392,9 @@ describe('Error handling', () => {
       let isAuthError = false
       try {
         await mockClient.getMe()
-      } catch (err: any) {
-        isAuthError = err.message.includes('AUTH_KEY')
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err)
+        isAuthError = message.includes('AUTH_KEY')
       }
 
       expect(isAuthError).toBe(true)
@@ -1393,7 +1425,7 @@ describe('Error handling', () => {
 
     it('should handle API timeout errors', async () => {
       mockClient = createMockClient({
-        call: mock((_req: any) =>
+        call: mock((_req: Record<string, unknown>) =>
           Promise.reject(new Error('Request timed out')),
         ),
       })
@@ -1485,7 +1517,7 @@ describe('Edge cases', () => {
         }),
       )
 
-      const cached = usersCache.getById('333')
+      const cached = requireCachedUser(usersCache.getById('333'))
       const userInfo = cachedUserToUserInfo(cached)
 
       expect(userInfo.isBot).toBe(true)
@@ -1499,7 +1531,7 @@ describe('Edge cases', () => {
         }),
       )
 
-      const cached = usersCache.getById('555')
+      const cached = requireCachedUser(usersCache.getById('555'))
       const userInfo = cachedUserToUserInfo(cached)
 
       expect(userInfo.isBot).toBe(false)
@@ -1515,7 +1547,7 @@ describe('Edge cases', () => {
         }),
       )
 
-      const cached = usersCache.getById('444')
+      const cached = requireCachedUser(usersCache.getById('444'))
       const userInfo = cachedUserToUserInfo(cached)
 
       expect(userInfo.isPremium).toBe(true)
@@ -1529,7 +1561,7 @@ describe('Edge cases', () => {
         }),
       )
 
-      const cached = usersCache.getById('666')
+      const cached = requireCachedUser(usersCache.getById('666'))
       const userInfo = cachedUserToUserInfo(cached)
 
       expect(userInfo.isPremium).toBe(false)
@@ -1545,7 +1577,7 @@ describe('Edge cases', () => {
         }),
       )
 
-      const cached = usersCache.getById('777')
+      const cached = requireCachedUser(usersCache.getById('777'))
       const userInfo = cachedUserToUserInfo(cached)
 
       expect(userInfo.isContact).toBe(true)
@@ -1644,36 +1676,54 @@ describe('Edge cases', () => {
   })
 })
 
+async function loadAccountHelpers(): Promise<{
+  createTestDatabase: typeof import('../db').createTestDatabase
+  resolveAccountSelector: typeof import('../utils/account-selector').resolveAccountSelector
+}> {
+  const [{ createTestDatabase }, { resolveAccountSelector }] =
+    await Promise.all([import('../db'), import('../utils/account-selector')])
+  return { createTestDatabase, resolveAccountSelector }
+}
+
 // =============================================================================
 // Account Parameter Tests
 // =============================================================================
 
 describe('Account parameter handling', () => {
-  it('should parse numeric account ID', () => {
-    const accountArg = '1'
-    const accountId = Number.parseInt(accountArg, 10)
+  it('should parse numeric account ID', async () => {
+    const { createTestDatabase, resolveAccountSelector } =
+      await loadAccountHelpers()
+    const { accountsDb } = createTestDatabase()
+    const account = accountsDb.create({ phone: '+1111111111' })
 
-    expect(accountId).toBe(1)
-    expect(Number.isNaN(accountId)).toBe(false)
+    const accountId = resolveAccountSelector(String(account.id), accountsDb)
+
+    expect(accountId).toBe(account.id)
   })
 
-  it('should handle undefined account arg', () => {
-    const accountArg: string | undefined = undefined
-    const accountId = accountArg ? Number.parseInt(accountArg, 10) : undefined
+  it('should handle undefined account arg', async () => {
+    const { createTestDatabase, resolveAccountSelector } =
+      await loadAccountHelpers()
+    const { accountsDb } = createTestDatabase()
+    const accountId = resolveAccountSelector(undefined, accountsDb)
 
     expect(accountId).toBeUndefined()
   })
 
-  it('should handle invalid account arg', () => {
-    const accountArg = 'invalid'
-    const accountId = Number.parseInt(accountArg, 10)
-
-    expect(Number.isNaN(accountId)).toBe(true)
+  it('should handle invalid account arg', async () => {
+    const { createTestDatabase, resolveAccountSelector } =
+      await loadAccountHelpers()
+    const { accountsDb } = createTestDatabase()
+    expect(() => resolveAccountSelector('invalid', accountsDb)).toThrow(
+      'Account not found',
+    )
   })
 
-  it('should use default account when not specified', () => {
-    const accountArg: string | undefined = undefined
-    const accountId = accountArg ? Number.parseInt(accountArg, 10) : undefined
+  it('should use default account when not specified', async () => {
+    const { createTestDatabase, resolveAccountSelector } =
+      await loadAccountHelpers()
+    const { accountsDb } = createTestDatabase()
+    const accountId = resolveAccountSelector(undefined, accountsDb)
 
     // When accountId is undefined, getClientForAccount uses default
     expect(accountId).toBeUndefined()
@@ -1703,11 +1753,8 @@ describe('Response structure', () => {
         }),
       )
 
-      const cached = usersCache.getById('123')
-      const stale = isCacheStale(
-        cached!.fetched_at,
-        cacheConfig.staleness.peers,
-      )
+      const cached = requireCachedUser(usersCache.getById('123'))
+      const stale = isCacheStale(cached.fetched_at, cacheConfig.staleness.peers)
 
       const response = {
         user: cachedUserToUserInfo(cached),
@@ -1721,15 +1768,12 @@ describe('Response structure', () => {
     })
 
     it('should build correct API response', () => {
-      const apiUser = {
+      const apiUser = makeRawUser({
         id: 456,
         firstName: 'API',
         lastName: 'User',
         username: 'apiuser',
-        bot: false,
-        premium: false,
-        contact: false,
-      }
+      })
 
       const response = {
         user: apiUserToUserInfo(apiUser),
@@ -1743,7 +1787,7 @@ describe('Response structure', () => {
     })
 
     it('should include all UserInfo fields', () => {
-      const apiUser = {
+      const apiUser = makeRawUser({
         id: 789,
         firstName: 'Complete',
         lastName: 'User',
@@ -1752,7 +1796,7 @@ describe('Response structure', () => {
         bot: true,
         premium: true,
         contact: true,
-      }
+      })
 
       const userInfo = apiUserToUserInfo(apiUser)
 
@@ -1778,11 +1822,8 @@ describe('Response structure', () => {
         }),
       )
 
-      const cached = usersCache.getById('999')
-      const stale = isCacheStale(
-        cached!.fetched_at,
-        cacheConfig.staleness.peers,
-      )
+      const cached = requireCachedUser(usersCache.getById('999'))
+      const stale = isCacheStale(cached.fetched_at, cacheConfig.staleness.peers)
 
       const response = {
         user: cachedUserToUserInfo(cached),
@@ -1801,18 +1842,17 @@ describe('Response structure', () => {
 
 describe('Cache input conversion', () => {
   it('should convert API user to cache input', () => {
-    const accessHashValue = '12345678901234567890'
-    const apiUser = {
+    const accessHashValue = '1234567890123456789'
+    const apiUser = makeRawUser({
       id: 123,
       firstName: 'Test',
       lastName: 'User',
       username: 'testuser',
       phone: '1234567890',
-      accessHash: accessHashValue,
-      bot: false,
+      accessHash: toLong(accessHashValue),
       premium: true,
       contact: true,
-    }
+    })
 
     const result = apiUserToCacheInput(apiUser)
 
@@ -1824,15 +1864,15 @@ describe('Cache input conversion', () => {
     expect(result.is_contact).toBe(1)
     expect(result.is_bot).toBe(0)
     expect(result.is_premium).toBe(1)
-    expect(result.access_hash).toBe('12345678901234567890')
+    expect(result.access_hash).toBe('1234567890123456789')
   })
 
   it('should handle BigInt accessHash', () => {
-    const apiUser = {
+    const apiUser = makeRawUser({
       id: 456,
       firstName: 'BigInt',
-      accessHash: BigInt('999999999999999999'),
-    }
+      accessHash: toLong('999999999999999999'),
+    })
 
     const result = apiUserToCacheInput(apiUser)
 
@@ -1840,11 +1880,11 @@ describe('Cache input conversion', () => {
   })
 
   it('should handle null accessHash', () => {
-    const apiUser = {
+    const apiUser = makeRawUser({
       id: 789,
       firstName: 'NoHash',
-      accessHash: null,
-    }
+      accessHash: undefined,
+    })
 
     const result = apiUserToCacheInput(apiUser)
 
@@ -1852,10 +1892,14 @@ describe('Cache input conversion', () => {
   })
 
   it('should handle undefined optional fields', () => {
-    const apiUser = {
+    const apiUser = makeRawUser({
       id: 111,
       firstName: 'Minimal',
-    }
+      lastName: undefined,
+      username: undefined,
+      phone: undefined,
+      accessHash: undefined,
+    })
 
     const result = apiUserToCacheInput(apiUser)
 
@@ -1868,9 +1912,12 @@ describe('Cache input conversion', () => {
   })
 
   it('should include raw_json', () => {
-    const apiUser = {
-      id: 222,
-      firstName: 'JSON',
+    type RawUserWithExtra = tl.RawUser & { customField: string }
+    const apiUser: RawUserWithExtra = {
+      ...makeRawUser({
+        id: 222,
+        firstName: 'JSON',
+      }),
       customField: 'value',
     }
 
@@ -1884,10 +1931,10 @@ describe('Cache input conversion', () => {
   it('should set fetched_at to current time', () => {
     const before = Date.now()
 
-    const apiUser = {
+    const apiUser = makeRawUser({
       id: 333,
       firstName: 'Timed',
-    }
+    })
 
     const result = apiUserToCacheInput(apiUser)
     const after = Date.now()

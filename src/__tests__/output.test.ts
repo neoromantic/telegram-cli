@@ -2,7 +2,7 @@
  * Output utilities tests
  */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import { ErrorCodes } from '../types'
+import { type ErrorCode, ErrorCodes } from '../types'
 import {
   error,
   getExitCode,
@@ -17,6 +17,7 @@ import {
   table,
   verbose,
 } from '../utils/output'
+import { snapshotLines } from './helpers/snapshots'
 
 // Set test environment to prevent process.exit
 process.env.BUN_ENV = 'test'
@@ -156,9 +157,10 @@ describe('Output Utilities', () => {
     it('should set code and details on thrown error', () => {
       try {
         error(ErrorCodes.AUTH_REQUIRED, 'Not logged in', { account: 1 })
-      } catch (e: any) {
-        expect(e.code).toBe('AUTH_REQUIRED')
-        expect(e.details).toEqual({ account: 1 })
+      } catch (e: unknown) {
+        const err = e as { code?: string; details?: Record<string, unknown> }
+        expect(err.code).toBe('AUTH_REQUIRED')
+        expect(err.details).toEqual({ account: 1 })
       }
     })
   })
@@ -189,7 +191,7 @@ describe('Output Utilities', () => {
     })
 
     it('should return 1 for unknown error codes', () => {
-      expect(getExitCode('UNKNOWN_ERROR' as any)).toBe(1)
+      expect(getExitCode('UNKNOWN_ERROR' as ErrorCode)).toBe(1)
     })
   })
 
@@ -339,6 +341,31 @@ describe('Output Utilities', () => {
 
       // Just verify it doesn't throw - actual output goes to console
       expect(() => success({ test: true })).not.toThrow()
+    })
+  })
+
+  describe('snapshots', () => {
+    it('should match json success output', () => {
+      setOutputFormat('json')
+      success({
+        message: 'Snapshot test',
+        count: 2,
+        items: ['alpha', 'beta'],
+      })
+
+      expect(snapshotLines(logs)).toMatchInlineSnapshot(`
+"{
+  "success": true,
+  "data": {
+    "message": "Snapshot test",
+    "count": 2,
+    "items": [
+      "alpha",
+      "beta"
+    ]
+  }
+}"
+`)
     })
   })
 })

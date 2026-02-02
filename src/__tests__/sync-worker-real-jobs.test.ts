@@ -3,6 +3,7 @@
  */
 import type { Database } from 'bun:sqlite'
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test'
+import type { TelegramClient } from '@mtcute/bun'
 import {
   processBackwardHistoryReal,
   processForwardCatchupReal,
@@ -28,7 +29,9 @@ describe('sync-worker real jobs', () => {
     initSyncSchema(db)
 
     ctx = {
-      client: { call: mock(async () => ({ messages: [] })) } as any,
+      client: {
+        call: mock(async () => ({ messages: [] })),
+      } as unknown as TelegramClient,
       messagesCache: createMessagesCache(db),
       chatSyncState: createChatSyncStateService(db),
       jobsService: createSyncJobsService(db),
@@ -100,7 +103,7 @@ describe('sync-worker real jobs', () => {
       }
     })
 
-    ctx.client = { call: clientCall } as any
+    ctx.client = { call: clientCall } as unknown as TelegramClient
 
     const result = await processForwardCatchupReal(ctx, job)
 
@@ -173,7 +176,7 @@ describe('sync-worker real jobs', () => {
       }
     })
 
-    ctx.client = { call: clientCall } as any
+    ctx.client = { call: clientCall } as unknown as TelegramClient
     ctx.config.batchSize = 5
 
     const result = await processBackwardHistoryReal(ctx, job)
@@ -203,7 +206,7 @@ describe('sync-worker real jobs', () => {
     })
 
     const clientCall = mock(async () => ({ messages: [] }))
-    ctx.client = { call: clientCall } as any
+    ctx.client = { call: clientCall } as unknown as TelegramClient
 
     const result = await processBackwardHistoryReal(ctx, job)
 
@@ -232,7 +235,7 @@ describe('sync-worker real jobs', () => {
     const clientCall = mock(async () => ({
       messages: [{ _: 'message', id: 3, date: 1700000002, message: 'a' }],
     }))
-    ctx.client = { call: clientCall } as any
+    ctx.client = { call: clientCall } as unknown as TelegramClient
     ctx.config.batchSize = 5
 
     const result = await processInitialLoadReal(ctx, job)
