@@ -7,6 +7,7 @@ import type { ChatSyncStateService } from '../db/chat-sync-state'
 import type { MessageInput, MessagesCache } from '../db/messages-cache'
 import { determineSyncPolicy, type SyncChatType } from '../db/sync-schema'
 import type { DaemonLogger } from './types'
+import { formatError } from './daemon-utils'
 
 /**
  * Context for update processing
@@ -248,10 +249,9 @@ async function handleBatchMessagesImpl(
     try {
       processChatBatch(deps, chatId, chatMessages)
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : String(err)
       const messageIds = chatMessages.map((m) => m.messageId)
       deps.logger.error(
-        `Failed to handle batch messages: chatId=${chatId}, messageCount=${chatMessages.length}, messageIds=[${messageIds.slice(0, 5).join(',')}${messageIds.length > 5 ? '...' : ''}], error=${errorMessage}`,
+        `Failed to handle batch messages: chatId=${chatId}, messageCount=${chatMessages.length}, messageIds=[${messageIds.slice(0, 5).join(',')}${messageIds.length > 5 ? '...' : ''}], error=${formatError(err)}`,
       )
     }
   }
@@ -267,9 +267,8 @@ function createSafeHandler<T>(
     try {
       await handler(data)
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : String(err)
       deps.logger.error(
-        `Failed to ${label}: ${logContext(data)}, error=${errorMessage}`,
+        `Failed to ${label}: ${logContext(data)}, error=${formatError(err)}`,
       )
     }
   }

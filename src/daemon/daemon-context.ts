@@ -1,4 +1,5 @@
 import type { AccountsDbInterface } from '../db'
+import type { DaemonStatusService } from '../db/daemon-status'
 import type { PidFile } from './pid-file'
 import type { SyncScheduler } from './scheduler'
 import type { RealSyncWorker } from './sync-worker'
@@ -15,6 +16,7 @@ export interface DaemonRuntime {
   lastJobProcessTime: number
   totalMessagesSynced: number
   signalHandlersSetup: boolean
+  statusService: DaemonStatusService | null
 }
 
 export interface DaemonContext {
@@ -37,5 +39,6 @@ export function createDaemonRuntime(): DaemonRuntime {
     lastJobProcessTime: 0,
     totalMessagesSynced: 0,
     signalHandlersSetup: false,
+    statusService: null,
   }
 }

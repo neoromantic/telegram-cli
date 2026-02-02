@@ -1,4 +1,5 @@
 import type { RealSyncWorker } from './sync-worker-real'
+import { formatError } from './daemon-utils'
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -88,7 +89,7 @@ export function createSyncWorkerRunner(
           })
           await sleep(delayMs)
         } catch (err) {
-          logger.error(`Worker error: ${err}`)
+          logger.error(`Worker error: ${formatError(err)}`)
           // Wait before retrying
           await sleep(pollIntervalMs)
         }

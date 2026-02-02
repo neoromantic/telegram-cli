@@ -22,6 +22,7 @@ import { createDaemonRuntime, type DaemonContext } from './daemon-context'
 import { createLogger } from './daemon-logger'
 import { mainLoop } from './daemon-loop'
 import { cleanupScheduler, initializeScheduler } from './daemon-scheduler'
+import { formatError } from './daemon-utils'
 import { createPidFile } from './pid-file'
 import {
   type DaemonConfig,
@@ -92,11 +93,12 @@ async function initializeDatabase(ctx: DaemonContext): Promise<boolean> {
     initSyncSchema(cacheDb)
 
     const statusService = createDaemonStatusService(cacheDb)
+    ctx.runtime.statusService = statusService
     statusService.setDaemonRunning(process.pid)
 
     return true
   } catch (err) {
-    ctx.logger.error(`Failed to initialize database: ${err}`)
+    ctx.logger.error(`Failed to initialize database: ${formatError(err)}`)
     return false
   }
 }
@@ -144,11 +146,13 @@ async function performCleanup(ctx: DaemonContext): Promise<void> {
     await disconnectAllAccounts(ctx)
 
     try {
-      const cacheDb = getCacheDb()
-      const statusService = createDaemonStatusService(cacheDb)
+      const statusService =
+        ctx.runtime.statusService ?? createDaemonStatusService(getCacheDb())
       statusService.setDaemonStopped()
     } catch (err) {
-      ctx.logger.warn(`Failed to update daemon status on shutdown: ${err}`)
+      ctx.logger.warn(
+        `Failed to update daemon status on shutdown: ${formatError(err)}`,
+      )
     }
 
     ctx.pidFile.release()
@@ -190,7 +194,7 @@ async function startDaemon(ctx: DaemonContext): Promise<DaemonExitCode> {
     ctx.pidFile.acquire()
     ctx.logger.debug(`PID file acquired: ${ctx.pidPath}`)
   } catch (err) {
-    ctx.logger.error(`Failed to acquire PID file: ${err}`)
+    ctx.logger.error(`Failed to acquire PID file: ${formatError(err)}`)
     return DaemonExitCode.Error
   }
 
@@ -217,13 +221,13 @@ async function startDaemon(ctx: DaemonContext): Promise<DaemonExitCode> {
   try {
     await initializeScheduler(ctx)
   } catch (err) {
-    ctx.logger.error(`Failed to initialize scheduler: ${err}`)
+    ctx.logger.error(`Failed to initialize scheduler: ${formatError(err)}`)
   }
 
   try {
     await mainLoop(ctx)
   } catch (err) {
-    ctx.logger.error(`Main loop error: ${err}`)
+    ctx.logger.error(`Main loop error: ${formatError(err)}`)
   }
 
   await performCleanup(ctx)

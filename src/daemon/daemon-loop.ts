@@ -1,12 +1,16 @@
-import { getCacheDb } from '../db'
-import { createDaemonStatusService } from '../db/daemon-status'
 import { attemptReconnect, scheduleReconnect } from './daemon-accounts'
 import type { DaemonContext } from './daemon-context'
+import { formatError, getErrorMessage } from './daemon-utils'
 import { processJobs } from './daemon-scheduler'
 
+const HEALTH_CHECK_INTERVAL_TICKS = 60
+const HEALTH_CHECK_COOLDOWN_MS = 60_000
+
 async function updateDaemonStatus(ctx: DaemonContext): Promise<void> {
-  const cacheDb = getCacheDb()
-  const statusService = createDaemonStatusService(cacheDb)
+  const statusService = ctx.runtime.statusService
+  if (!statusService) {
+    return
+  }
 
   const connectedCount = Array.from(ctx.state.accounts.values()).filter(
     (a) => a.status === 'connected',
@@ -26,15 +30,19 @@ async function updateDaemonStatus(ctx: DaemonContext): Promise<void> {
 async function runHealthChecks(ctx: DaemonContext, now: number): Promise<void> {
   for (const accountState of ctx.state.accounts.values()) {
     if (accountState.status === 'connected' && accountState.client) {
+      const lastActivity = accountState.lastActivity ?? 0
+      if (now - lastActivity < HEALTH_CHECK_COOLDOWN_MS) {
+        continue
+      }
       try {
         await accountState.client.getMe()
         accountState.lastActivity = Date.now()
       } catch (err) {
         ctx.logger.warn(
-          `Connection health check failed for ${accountState.phone}: ${err}`,
+          `Connection health check failed for ${accountState.phone}: ${formatError(err)}`,
         )
         accountState.status = 'error'
-        accountState.lastError = String(err)
+        accountState.lastError = getErrorMessage(err)
         scheduleReconnect(ctx, accountState)
       }
     }
@@ -45,7 +53,9 @@ async function runHealthChecks(ctx: DaemonContext, now: number): Promise<void> {
       now >= accountState.nextReconnectAt
     ) {
       attemptReconnect(ctx, accountState).catch((err) => {
-        ctx.logger.error(`Unexpected error during reconnection: ${err}`)
+        ctx.logger.error(
+          `Unexpected error during reconnection: ${formatError(err)}`,
+        )
       })
     }
   }
@@ -64,7 +74,6 @@ export async function mainLoop(ctx: DaemonContext): Promise<void> {
   ctx.logger.debug('Starting main event loop...')
 
   let loopIteration = 0
-  const healthCheckInterval = 10
   const cleanupInterval = 300
 
   while (!ctx.state.shutdownRequested) {
@@ -74,24 +83,24 @@ export async function mainLoop(ctx: DaemonContext): Promise<void> {
     try {
       await processJobs(ctx)
     } catch (err) {
-      ctx.logger.warn(`Error processing jobs: ${err}`)
+      ctx.logger.warn(`Error processing jobs: ${formatError(err)}`)
     }
 
-    if (loopIteration % healthCheckInterval === 0) {
+    if (loopIteration % HEALTH_CHECK_INTERVAL_TICKS === 0) {
       await runHealthChecks(ctx, now)
     }
 
     try {
       await updateDaemonStatus(ctx)
     } catch (err) {
-      ctx.logger.warn(`Failed to update daemon status: ${err}`)
+      ctx.logger.warn(`Failed to update daemon status: ${formatError(err)}`)
     }
 
     if (loopIteration % cleanupInterval === 0) {
       try {
         await cleanupOldJobs(ctx)
       } catch (err) {
-        ctx.logger.warn(`Failed to cleanup old jobs: ${err}`)
+        ctx.logger.warn(`Failed to cleanup old jobs: ${formatError(err)}`)
       }
     }
 

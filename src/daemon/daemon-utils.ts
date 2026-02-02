@@ -8,3 +8,27 @@ export function calculateReconnectDelay(
     config.initialDelayMs * config.backoffMultiplier ** (attemptNumber - 1)
   return Math.min(delay, config.maxDelayMs)
 }
+
+export function formatError(err: unknown): string {
+  if (err instanceof Error) {
+    return err.stack ?? err.message
+  }
+  if (typeof err === 'string') {
+    return err
+  }
+  try {
+    return JSON.stringify(err)
+  } catch {
+    return String(err)
+  }
+}
+
+export function getErrorMessage(err: unknown): string {
+  if (err instanceof Error) {
+    return err.message
+  }
+  if (typeof err === 'string') {
+    return err
+  }
+  return String(err)
+}

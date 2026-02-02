@@ -5,7 +5,7 @@ import { createChatSyncStateService } from '../db/chat-sync-state'
 import { createMessagesCache } from '../db/messages-cache'
 import { getDefaultConfig, validateConfig } from '../services/telegram'
 import type { DaemonContext } from './daemon-context'
-import { calculateReconnectDelay } from './daemon-utils'
+import { calculateReconnectDelay, formatError, getErrorMessage } from './daemon-utils'
 import {
   createUpdateHandlers,
   type NewMessageData,
@@ -24,7 +24,9 @@ export async function closeClientSafe(
     await closeFn.call(client)
     ctx.logger.debug(`Closed client (${reason})`)
   } catch (err) {
-    ctx.logger.warn(`Failed to close client (${reason}): ${err}`)
+    ctx.logger.warn(
+      `Failed to close client (${reason}): ${formatError(err)}`,
+    )
   }
 }
 
@@ -82,7 +84,7 @@ export function setupEventHandlers(
       }
 
       updateHandlers.handleNewMessage(ctxLocal, data).catch((err) => {
-        ctx.logger.error(`Error handling new message: ${err}`)
+        ctx.logger.error(`Error handling new message: ${formatError(err)}`)
       })
 
       accountState.lastActivity = Date.now()
@@ -103,7 +105,7 @@ export function setupEventHandlers(
             : Date.now() / 1000,
         })
         .catch((err) => {
-          ctx.logger.error(`Error handling message edit: ${err}`)
+          ctx.logger.error(`Error handling message edit: ${formatError(err)}`)
         })
 
       accountState.lastActivity = Date.now()
@@ -126,7 +128,9 @@ export function setupEventHandlers(
             )
           })
           .catch((err) => {
-            ctx.logger.error(`Error handling message deletion: ${err}`)
+            ctx.logger.error(
+              `Error handling message deletion: ${formatError(err)}`,
+            )
           })
 
         accountState.lastActivity = Date.now()
@@ -140,7 +144,9 @@ export function setupEventHandlers(
           messageIds: update.messageIds,
         })
         .catch((err) => {
-          ctx.logger.error(`Error handling message deletion: ${err}`)
+          ctx.logger.error(
+            `Error handling message deletion: ${formatError(err)}`,
+          )
         })
 
       accountState.lastActivity = Date.now()
@@ -272,8 +278,10 @@ export async function connectAccount(
 
     return true
   } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err)
-    ctx.logger.error(`Failed to connect account ${phone}: ${errorMessage}`)
+    const errorMessage = getErrorMessage(err)
+    ctx.logger.error(
+      `Failed to connect account ${phone}: ${formatError(err)}`,
+    )
 
     accountState.status = 'error'
     accountState.lastError = errorMessage
@@ -366,9 +374,9 @@ export async function attemptReconnect(
 
     return true
   } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err)
+    const errorMessage = getErrorMessage(err)
     ctx.logger.error(
-      `Reconnection failed for ${accountState.phone}: ${errorMessage}`,
+      `Reconnection failed for ${accountState.phone}: ${formatError(err)}`,
     )
 
     accountState.status = 'error'
@@ -389,7 +397,7 @@ export async function disconnectAllAccounts(ctx: DaemonContext): Promise<void> {
         removeEventHandlers(ctx, accountState)
       } catch (err) {
         ctx.logger.warn(
-          `Error removing event handlers for ${accountState.phone}: ${err}`,
+          `Error removing event handlers for ${accountState.phone}: ${formatError(err)}`,
         )
       }
     }
@@ -399,7 +407,7 @@ export async function disconnectAllAccounts(ctx: DaemonContext): Promise<void> {
         ctx.logger.debug(`Disconnected account ${accountState.phone}`)
       } catch (err) {
         ctx.logger.warn(
-          `Error disconnecting account ${accountState.phone}: ${err}`,
+          `Error disconnecting account ${accountState.phone}: ${formatError(err)}`,
         )
       }
     }

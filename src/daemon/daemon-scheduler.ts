@@ -8,6 +8,7 @@ import { SyncJobType } from '../db/sync-schema'
 import type { DaemonContext } from './daemon-context'
 import { DEFAULT_JOB_EXECUTOR_CONFIG } from './job-executor'
 import { createSyncScheduler } from './scheduler'
+import { formatError } from './daemon-utils'
 import { createRealSyncWorker, type RealSyncWorker } from './sync-worker'
 
 export async function initializeScheduler(ctx: DaemonContext): Promise<void> {
@@ -105,8 +106,6 @@ export async function processJobs(ctx: DaemonContext): Promise<void> {
 
   const { scheduler, job, worker } = context
 
-  ctx.runtime.lastJobProcessTime = now
-
   ctx.logger.debug(
     `Processing job ${job.id}: ${job.job_type} for chat ${job.chat_id}`,
   )
@@ -136,8 +135,9 @@ export async function processJobs(ctx: DaemonContext): Promise<void> {
       ctx.logger.warn(`Job ${job.id} failed: ${result.error}`)
     }
   } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err)
-    ctx.logger.error(`Job ${job.id} error: ${errorMessage}`)
+    ctx.logger.error(`Job ${job.id} error: ${formatError(err)}`)
+  } finally {
+    ctx.runtime.lastJobProcessTime = Date.now()
   }
 }
 
