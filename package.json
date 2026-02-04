@@ -4,7 +4,7 @@
   "description": "Agent-friendly Telegram sync CLI with full API support",
   "type": "module",
   "bin": {
-    "tg": "./dist/tg"
+    "tg": "dist/tg"
   },
   "files": [
     "src/**/*.ts",
@@ -46,7 +46,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/neoromantic/telegram-sync-cli.git"
+    "url": "git+https://github.com/neoromantic/telegram-sync-cli.git"
   },
   "bugs": {
     "url": "https://github.com/neoromantic/telegram-sync-cli/issues"
