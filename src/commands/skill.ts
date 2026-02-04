@@ -9,7 +9,7 @@ import { defineCommand } from 'citty'
 import { ErrorCodes } from '../types'
 import { error, success } from '../utils/output'
 
-const CLI_VERSION = '0.1.0'
+const CLI_VERSION = '0.1.1'
 
 export interface SkillManifest {
   name: string

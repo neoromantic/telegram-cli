@@ -31,7 +31,7 @@ describe('E2E: Help Commands', () => {
     it('should show version with exit code 0', async () => {
       const result = await runCliSuccess(['--version'])
 
-      expect(result.stdout).toContain('0.1.0')
+      expect(result.stdout).toContain('0.1.1')
     })
   })
 

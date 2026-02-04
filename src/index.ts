@@ -25,7 +25,7 @@ import { error, setOutputFormat } from './utils/output'
 const main = defineCommand({
   meta: {
     name: 'tg',
-    version: '0.1.0',
+    version: '0.1.1',
     description: 'Telegram Sync CLI - Agent-friendly Telegram client',
   },
   args: {

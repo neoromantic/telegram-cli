@@ -46,7 +46,8 @@ cp .env.example .env
 # Edit .env with your API credentials from https://my.telegram.org/apps
 ```
 
-Note: global installs build a native binary during `postinstall`, so Bun must be available on the system.
+Note: the npm package does not include `dist/tg`. Global installs build a native
+binary during `postinstall`, so Bun must be available on the system.
 
 ## Quick Start
 

@@ -63,7 +63,7 @@ describe('Skill Command Helpers', () => {
       description: 'Agent-friendly Telegram Sync CLI',
       install_command: 'bun install -g @goodit/telegram-sync-cli',
       entrypoint: 'tg',
-      version: '0.1.0',
+      version: '0.1.1',
       output: 'json',
     })
   })
