@@ -4,7 +4,7 @@
   "description": "Agent-friendly Telegram sync CLI with full API support",
   "type": "module",
   "bin": {
-    "tg": "./bin/tg.cjs"
+    "tg": "bin/tg.cjs"
   },
   "files": [
     "bin/tg.cjs",
