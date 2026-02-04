@@ -54,7 +54,10 @@ export interface SkillInstallResult {
 }
 
 function resolveDataDir(): string {
-  return process.env.TELEGRAM_SYNC_CLI_DATA_DIR ?? join(homedir(), '.telegram-sync-cli')
+  return (
+    process.env.TELEGRAM_SYNC_CLI_DATA_DIR ??
+    join(homedir(), '.telegram-sync-cli')
+  )
 }
 
 /** @internal exported for testing */

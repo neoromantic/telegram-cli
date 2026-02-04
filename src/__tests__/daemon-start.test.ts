@@ -30,7 +30,8 @@ afterEach(() => {
   }
   process.env.TELEGRAM_API_ID = originalEnv.TELEGRAM_API_ID
   process.env.TELEGRAM_API_HASH = originalEnv.TELEGRAM_API_HASH
-  process.env.TELEGRAM_SYNC_CLI_DATA_DIR = originalEnv.TELEGRAM_SYNC_CLI_DATA_DIR
+  process.env.TELEGRAM_SYNC_CLI_DATA_DIR =
+    originalEnv.TELEGRAM_SYNC_CLI_DATA_DIR
 })
 
 describe('daemon start config/pid failures', () => {
