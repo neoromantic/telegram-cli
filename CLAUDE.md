@@ -91,7 +91,8 @@ bun install -g @goodit/telegram-sync-cli
 bun link
 ```
 
-The `postinstall` script automatically compiles a native binary to `dist/tg`.
+The npm package does not include `dist/tg`. The `postinstall` script
+automatically compiles a native binary to `dist/tg` locally (Bun required).
 
 ### Build Scripts
 
@@ -105,7 +106,8 @@ The `postinstall` script automatically compiles a native binary to `dist/tg`.
 
 ### Binary Size
 
-The compiled binary is ~60MB (includes embedded Bun runtime + SQLite).
+The compiled binary is ~60MB (includes embedded Bun runtime + SQLite). It is
+built locally and not shipped in the npm tarball.
 
 ### Supported Platforms
 
