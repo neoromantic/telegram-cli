@@ -59,9 +59,9 @@ describe('Skill Command Helpers', () => {
     const manifest = skillModule.buildSkillManifest()
 
     expect(manifest).toMatchObject({
-      name: 'telegram-sync-cli',
+      name: '@goodit/telegram-sync-cli',
       description: 'Agent-friendly Telegram Sync CLI',
-      install_command: 'bun install -g telegram-sync-cli',
+      install_command: 'bun install -g @goodit/telegram-sync-cli',
       entrypoint: 'tg',
       version: '0.1.0',
       output: 'json',
@@ -134,7 +134,7 @@ describe('Skill Command Helpers', () => {
       expect(first.path).toBe(targetPath)
       expect(first.overwritten).toBe(false)
       expect(first.bytes).toBeGreaterThan(0)
-      expect(first.manifest.name).toBe('telegram-sync-cli')
+      expect(first.manifest.name).toBe('@goodit/telegram-sync-cli')
 
       const second = await skillModule.installSkillManifest(targetPath)
 
@@ -143,7 +143,7 @@ describe('Skill Command Helpers', () => {
       const manifestText = await Bun.file(targetPath).text()
       const manifest = JSON.parse(manifestText)
 
-      expect(manifest.name).toBe('telegram-sync-cli')
+      expect(manifest.name).toBe('@goodit/telegram-sync-cli')
       expect(manifest.entrypoint).toBe('tg')
     } finally {
       await Bun.file(targetPath)

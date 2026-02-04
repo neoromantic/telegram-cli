@@ -85,7 +85,7 @@ All jobs run in parallel with Bun dependency caching. See `.github/workflows/ci.
 
 ```bash
 # From npm/bun registry (once published)
-bun install -g telegram-sync-cli
+bun install -g @goodit/telegram-sync-cli
 
 # From local source
 bun link

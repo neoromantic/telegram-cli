@@ -116,9 +116,9 @@ Example output:
 {
   "success": true,
   "data": {
-    "name": "telegram-sync-cli",
+    "name": "@goodit/telegram-sync-cli",
     "description": "Agent-friendly Telegram Sync CLI",
-    "install_command": "bun install -g telegram-sync-cli",
+    "install_command": "bun install -g @goodit/telegram-sync-cli",
     "entrypoint": "tg",
     "version": "<cli-version>",
     "output": "json"

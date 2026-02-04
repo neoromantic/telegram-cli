@@ -30,9 +30,9 @@ Agent-friendly Telegram Sync CLI with a local cache and full API access. Built o
 
 ```bash
 # Install from npm/bun registry
-bun install -g telegram-sync-cli
+bun install -g @goodit/telegram-sync-cli
 # or
-npm install -g telegram-sync-cli
+npm install -g @goodit/telegram-sync-cli
 
 # Clone the repository
 git clone <repo-url>

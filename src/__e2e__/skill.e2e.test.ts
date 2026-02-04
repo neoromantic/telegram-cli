@@ -49,7 +49,7 @@ describe('E2E: Skill Commands', () => {
       }
       expect(payload.success).toBe(true)
       expect(payload.data).toMatchObject({
-        name: 'telegram-sync-cli',
+        name: '@goodit/telegram-sync-cli',
         entrypoint: 'tg',
         output: 'json',
       })
@@ -105,7 +105,7 @@ describe('E2E: Skill Commands', () => {
       const manifestText = await Bun.file(manifestPath).text()
       const manifest = JSON.parse(manifestText)
 
-      expect(manifest.name).toBe('telegram-sync-cli')
+      expect(manifest.name).toBe('@goodit/telegram-sync-cli')
       expect(manifest.entrypoint).toBe('tg')
     } finally {
       env.cleanup()
