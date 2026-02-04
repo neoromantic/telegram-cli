@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /*
  * CLI shim for @goodit/telegram-sync-cli.
  * - Uses compiled binary if present (dist/tg)
