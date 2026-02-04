@@ -54,7 +54,7 @@ export interface SkillInstallResult {
 }
 
 function resolveDataDir(): string {
-  return process.env.TELEGRAM_CLI_DATA_DIR ?? join(homedir(), '.telegram-cli')
+  return process.env.TELEGRAM_SYNC_CLI_DATA_DIR ?? join(homedir(), '.telegram-sync-cli')
 }
 
 /** @internal exported for testing */
@@ -67,9 +67,9 @@ export function getErrorMessage(err: unknown): string {
 
 export function buildSkillManifest(): SkillManifest {
   return {
-    name: 'telegram-cli',
-    description: 'Agent-friendly Telegram CLI',
-    install_command: 'bun install -g telegram-cli',
+    name: 'telegram-sync-cli',
+    description: 'Agent-friendly Telegram Sync CLI',
+    install_command: 'bun install -g telegram-sync-cli',
     entrypoint: 'tg',
     version: CLI_VERSION,
     output: 'json',

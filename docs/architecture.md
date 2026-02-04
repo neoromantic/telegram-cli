@@ -2,7 +2,7 @@
 
 ## Overview
 
-telegram-cli is a command-line utility for interacting with Telegram's full API. It's designed for:
+telegram-sync-cli is a command-line utility for interacting with Telegram's full API. It's designed for:
 - Agent-friendly automation
 - Multi-account support
 - Non-interactive command execution
@@ -32,10 +32,10 @@ telegram-cli is a command-line utility for interacting with Telegram's full API.
 
 ## Data Layout (Current)
 
-Default data directory: `~/.telegram-cli` (override with `TELEGRAM_CLI_DATA_DIR`).
+Default data directory: `~/.telegram-sync-cli` (override with `TELEGRAM_SYNC_CLI_DATA_DIR`).
 
 ```
-~/.telegram-cli/
+~/.telegram-sync-cli/
 ├── data.db            # accounts
 ├── cache.db           # cache + sync tables
 ├── session_<id>.db    # mtcute session per account
@@ -73,7 +73,7 @@ Default data directory: `~/.telegram-cli` (override with `TELEGRAM_CLI_DATA_DIR`
 - **Cache/Sync DB** (`cache.db`) — users/chats cache, messages, sync jobs/state
 - **Sessions** (`session_<id>.db`) — mtcute session storage per account
 
-> `TELEGRAM_CLI_DATA_DIR` overrides the base data directory (defaults to `~/.telegram-cli`).
+> `TELEGRAM_SYNC_CLI_DATA_DIR` overrides the base data directory (defaults to `~/.telegram-sync-cli`).
 
 ### 4. Cache Services (`src/db/*-cache.ts`)
 - `UsersCache` — user/contact caching with search

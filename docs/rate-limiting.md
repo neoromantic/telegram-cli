@@ -4,7 +4,7 @@
 
 ## Overview
 
-telegram-cli coordinates rate limits across the CLI and daemon via a shared
+telegram-sync-cli coordinates rate limits across the CLI and daemon via a shared
 SQLite cache database. All API calls are recorded and FLOOD_WAITs are enforced
 before subsequent calls are made.
 

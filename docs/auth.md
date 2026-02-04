@@ -62,7 +62,7 @@ Use `--account` to target a specific account by **ID**, **@username**, or **labe
 
 ## Storage
 
-Authentication data lives in the data directory (default `~/.telegram-cli`, override with `TELEGRAM_CLI_DATA_DIR`):
+Authentication data lives in the data directory (default `~/.telegram-sync-cli`, override with `TELEGRAM_SYNC_CLI_DATA_DIR`):
 
 - `data.db` — accounts table
 - `session_<id>.db` — mtcute session storage per account

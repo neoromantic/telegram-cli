@@ -13,13 +13,13 @@ import { initSyncSchema } from './sync-schema'
 
 /**
  * Get the data directory path
- * Supports TELEGRAM_CLI_DATA_DIR env var for testing isolation
+ * Supports TELEGRAM_SYNC_CLI_DATA_DIR env var for testing isolation
  */
 function resolveDataDir(): string {
-  return process.env.TELEGRAM_CLI_DATA_DIR ?? join(homedir(), '.telegram-cli')
+  return process.env.TELEGRAM_SYNC_CLI_DATA_DIR ?? join(homedir(), '.telegram-sync-cli')
 }
 
-// Database location: ~/.telegram-cli/data.db (or TELEGRAM_CLI_DATA_DIR if set)
+// Database location: ~/.telegram-sync-cli/data.db (or TELEGRAM_SYNC_CLI_DATA_DIR if set)
 const DATA_DIR = resolveDataDir()
 const DB_PATH = join(DATA_DIR, 'data.db')
 

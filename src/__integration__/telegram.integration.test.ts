@@ -14,7 +14,7 @@ const SHOULD_RUN = Boolean(
   TEST_ACCOUNT && TEST_SESSION_PATH && API_ID && API_HASH,
 )
 
-describe.skipIf(!SHOULD_RUN)('Integration: Telegram CLI (real API)', () => {
+describe.skipIf(!SHOULD_RUN)('Integration: Telegram Sync CLI (real API)', () => {
   let env: IntegrationEnvironment
 
   beforeEach(async () => {

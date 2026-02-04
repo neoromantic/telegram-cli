@@ -1,5 +1,5 @@
 /**
- * Type definitions for telegram-cli
+ * Type definitions for telegram-sync-cli
  */
 
 /** Account stored in database */

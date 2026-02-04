@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-const INTEGRATION_TEST_BASE = join(tmpdir(), 'telegram-cli-integration-tests')
+const INTEGRATION_TEST_BASE = join(tmpdir(), 'telegram-sync-cli-integration-tests')
 
 export interface IntegrationEnvironment {
   dataDir: string
@@ -154,7 +154,7 @@ export function createIntegrationEnvironment(
     getCliOptions(extraEnv: Record<string, string> = {}) {
       return {
         env: {
-          TELEGRAM_CLI_DATA_DIR: dataDir,
+          TELEGRAM_SYNC_CLI_DATA_DIR: dataDir,
           ...extraEnv,
         },
       }

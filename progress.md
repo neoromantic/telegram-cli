@@ -97,7 +97,7 @@ The daemon now supports:
 ## File Structure
 
 ```
-telegram-cli/
+telegram-sync-cli/
 ├── src/
 │   ├── index.ts              # CLI entry point
 │   ├── commands/

@@ -1,6 +1,6 @@
 # Implementation Plans
 
-This directory contains **not-yet-complete** feature plans for telegram-cli.
+This directory contains **not-yet-complete** feature plans for telegram-sync-cli.
 For implemented features, see the `docs/` directory.
 
 ## Status Definitions

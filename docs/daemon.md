@@ -42,8 +42,8 @@ tg daemon status
 ### Daemon PID
 
 PID file location:
-- `~/.telegram-cli/daemon.pid`
-- Respecting `TELEGRAM_CLI_DATA_DIR` override
+- `~/.telegram-sync-cli/daemon.pid`
+- Respecting `TELEGRAM_SYNC_CLI_DATA_DIR` override
 
 ---
 

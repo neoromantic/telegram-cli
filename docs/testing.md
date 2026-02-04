@@ -1,6 +1,6 @@
 # Testing Guide
 
-This document covers the implemented testing infrastructure for telegram-cli.
+This document covers the implemented testing infrastructure for telegram-sync-cli.
 
 ## Overview
 
@@ -99,11 +99,11 @@ E2E tests execute the CLI binary via `Bun.spawn` to verify actual command behavi
 
 ### Test Isolation
 
-Tests use `TELEGRAM_CLI_DATA_DIR` to create isolated environments:
+Tests use `TELEGRAM_SYNC_CLI_DATA_DIR` to create isolated environments:
 
 - Unique temp directory per test
 - Fresh SQLite database
-- No interference with production data (`~/.telegram-cli/`)
+- No interference with production data (`~/.telegram-sync-cli/`)
 - Automatic cleanup after each test
 
 ### E2E Files
@@ -177,7 +177,7 @@ TELEGRAM_API_REPLAY=1 bun run test:integration
 ```
 
 By default fixtures are stored under:
-`$TELEGRAM_CLI_DATA_DIR/fixtures/telegram`. Override with
+`$TELEGRAM_SYNC_CLI_DATA_DIR/fixtures/telegram`. Override with
 `TELEGRAM_API_FIXTURES_DIR`.
 
 ## CI/CD

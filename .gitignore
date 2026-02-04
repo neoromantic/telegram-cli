@@ -32,8 +32,8 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 *.db-wal
 *.db-shm
 
-# Telegram CLI data directory
-~/.telegram-cli/
+# Telegram Sync CLI data directory
+~/.telegram-sync-cli/
 
 # Editor/IDE
 .idea/

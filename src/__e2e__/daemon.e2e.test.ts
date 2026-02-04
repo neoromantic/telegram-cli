@@ -15,7 +15,7 @@ interface JsonResult {
 
 describe('daemon commands', () => {
   let testDir: string
-  let env: { TELEGRAM_CLI_DATA_DIR: string }
+  let env: { TELEGRAM_SYNC_CLI_DATA_DIR: string }
 
   beforeEach(() => {
     testDir = join(
@@ -23,7 +23,7 @@ describe('daemon commands', () => {
       `tg-cli-e2e-daemon-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     )
     mkdirSync(testDir, { recursive: true })
-    env = { TELEGRAM_CLI_DATA_DIR: testDir }
+    env = { TELEGRAM_SYNC_CLI_DATA_DIR: testDir }
   })
 
   afterEach(() => {

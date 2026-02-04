@@ -4,7 +4,7 @@
 
 ## Overview
 
-telegram-cli ships both as source (Bun-run TypeScript) and as a compiled
+telegram-sync-cli ships both as source (Bun-run TypeScript) and as a compiled
 standalone binary using Bun's `--compile`.
 
 ## Build Commands

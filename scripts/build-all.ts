@@ -17,7 +17,7 @@ if (!existsSync('dist')) {
   mkdirSync('dist')
 }
 
-console.log(`Building telegram-cli v${pkg.version} for all platforms...\n`)
+console.log(`Building telegram-sync-cli v${pkg.version} for all platforms...\n`)
 
 const results: { target: string; success: boolean; error?: string }[] = []
 

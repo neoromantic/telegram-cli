@@ -163,7 +163,7 @@ async function performCleanup(ctx: DaemonContext): Promise<void> {
 }
 
 async function startDaemon(ctx: DaemonContext): Promise<DaemonExitCode> {
-  ctx.logger.info('Starting Telegram CLI daemon...')
+  ctx.logger.info('Starting Telegram Sync CLI daemon...')
 
   let exitCode = DaemonExitCode.Success
 

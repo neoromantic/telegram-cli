@@ -14,8 +14,8 @@ The `tg sql` command provides direct SQL access to the local cache database for 
 
 The command operates on the **cache database**:
 
-- Default: `~/.telegram-cli/cache.db`
-- Override: `TELEGRAM_CLI_DATA_DIR=/path` → `/path/cache.db`
+- Default: `~/.telegram-sync-cli/cache.db`
+- Override: `TELEGRAM_SYNC_CLI_DATA_DIR=/path` → `/path/cache.db`
 
 | Table | Description | TTL |
 |-------|-------------|-----|

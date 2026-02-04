@@ -1,6 +1,6 @@
-# telegram-cli
+# telegram-sync-cli
 
-Agent-friendly Telegram CLI with a local cache and full API access. Built on Bun + mtcute.
+Agent-friendly Telegram Sync CLI with a local cache and full API access. Built on Bun + mtcute.
 
 ## Features
 
@@ -29,9 +29,14 @@ Agent-friendly Telegram CLI with a local cache and full API access. Built on Bun
 ## Installation
 
 ```bash
+# Install from npm/bun registry
+bun install -g telegram-sync-cli
+# or
+npm install -g telegram-sync-cli
+
 # Clone the repository
 git clone <repo-url>
-cd telegram-cli
+cd telegram-sync-cli
 
 # Install dependencies
 bun install
@@ -40,6 +45,8 @@ bun install
 cp .env.example .env
 # Edit .env with your API credentials from https://my.telegram.org/apps
 ```
+
+Note: global installs build a native binary during `postinstall`, so Bun must be available on the system.
 
 ## Quick Start
 
@@ -98,7 +105,7 @@ tg contacts list --format quiet
 |----------|-------------|
 | `TELEGRAM_API_ID` | Your Telegram API ID |
 | `TELEGRAM_API_HASH` | Your Telegram API Hash |
-| `TELEGRAM_CLI_DATA_DIR` | Override data directory |
+| `TELEGRAM_SYNC_CLI_DATA_DIR` | Override data directory |
 | `MTCUTE_LOG_LEVEL` | mtcute log level |
 | `VERBOSE` | Verbose logging (`1`) |
 

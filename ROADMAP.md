@@ -1,8 +1,8 @@
-# Telegram CLI Roadmap
+# Telegram Sync CLI Roadmap
 
 ## Vision
 
-A complete Telegram CLI client for developers and AI agents. Installable via `bun`, `npm`, `pnpm`, and eventually `homebrew`.
+A complete Telegram Sync CLI client for developers and AI agents. Installable via `bun`, `npm`, `pnpm`, and eventually `homebrew`.
 
 **Note:** Implemented features live in `README.md` and `docs/`. This roadmap tracks only **planned** and **partial** work.
 

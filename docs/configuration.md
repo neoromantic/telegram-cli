@@ -1,6 +1,6 @@
 # Configuration
 
-> **Status: Implemented (v0.1.0)** — current configuration system for telegram-cli.
+> **Status: Implemented (v0.1.0)** — current configuration system for telegram-sync-cli.
 
 ## Overview
 
@@ -14,16 +14,16 @@ source of truth for Telegram API credentials.
 |----------|---------|
 | `TELEGRAM_API_ID` | Telegram API ID |
 | `TELEGRAM_API_HASH` | Telegram API hash |
-| `TELEGRAM_CLI_DATA_DIR` | Override data directory |
+| `TELEGRAM_SYNC_CLI_DATA_DIR` | Override data directory |
 | `MTCUTE_LOG_LEVEL` | mtcute log level |
 | `VERBOSE` | Verbose logging (`1`) |
 
 ## Storage Layout
 
-Default data directory: `~/.telegram-cli` (override with `TELEGRAM_CLI_DATA_DIR`).
+Default data directory: `~/.telegram-sync-cli` (override with `TELEGRAM_SYNC_CLI_DATA_DIR`).
 
 ```
-~/.telegram-cli/
+~/.telegram-sync-cli/
 ├── data.db            # Accounts table
 ├── cache.db           # Cache + sync tables
 ├── session_<id>.db    # mtcute session per account
@@ -33,8 +33,8 @@ Default data directory: `~/.telegram-cli` (override with `TELEGRAM_CLI_DATA_DIR`
 
 ## Configuration File
 
-**Path:** `<dataDir>/config.json` where `dataDir` is `TELEGRAM_CLI_DATA_DIR` or
-`~/.telegram-cli`.
+**Path:** `<dataDir>/config.json` where `dataDir` is `TELEGRAM_SYNC_CLI_DATA_DIR` or
+`~/.telegram-sync-cli`.
 
 Supported keys:
 

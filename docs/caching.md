@@ -1,6 +1,6 @@
 # Caching Strategy
 
-> **Status:** Implemented. This document describes the caching system for telegram-cli, using a Stale-While-Revalidate pattern for optimal performance and user experience.
+> **Status:** Implemented. This document describes the caching system for telegram-sync-cli, using a Stale-While-Revalidate pattern for optimal performance and user experience.
 
 ## Design Philosophy
 

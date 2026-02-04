@@ -10,7 +10,7 @@ import { existsSync, mkdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-const E2E_TEST_BASE = join(tmpdir(), 'telegram-cli-e2e-tests')
+const E2E_TEST_BASE = join(tmpdir(), 'telegram-sync-cli-e2e-tests')
 
 export interface TestEnvironment {
   /** Path to the isolated data directory */
@@ -141,7 +141,7 @@ export function createTestEnvironment(testName: string): TestEnvironment {
     getCliOptions(): { env: Record<string, string> } {
       return {
         env: {
-          TELEGRAM_CLI_DATA_DIR: dataDir,
+          TELEGRAM_SYNC_CLI_DATA_DIR: dataDir,
         },
       }
     },

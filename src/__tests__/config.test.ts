@@ -22,7 +22,7 @@ import { getDefaultCacheConfig, parseDuration } from '../db/types'
 let dataDir: string
 
 beforeEach(() => {
-  dataDir = mkdtempSync(join(tmpdir(), 'telegram-cli-config-test-'))
+  dataDir = mkdtempSync(join(tmpdir(), 'telegram-sync-cli-config-test-'))
 })
 
 afterEach(() => {

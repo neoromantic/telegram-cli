@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 /**
- * Telegram CLI - Main Entry Point
+ * Telegram Sync CLI - Main Entry Point
  *
- * A comprehensive Telegram CLI client for agent-friendly automation.
+ * A comprehensive Telegram Sync CLI client for agent-friendly automation.
  */
 import { defineCommand, runMain } from 'citty'
 import { accountsCommand } from './commands/accounts'
@@ -26,7 +26,7 @@ const main = defineCommand({
   meta: {
     name: 'tg',
     version: '0.1.0',
-    description: 'Telegram CLI - Agent-friendly Telegram client',
+    description: 'Telegram Sync CLI - Agent-friendly Telegram client',
   },
   args: {
     format: {

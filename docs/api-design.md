@@ -99,8 +99,8 @@ tg skill install
 ### Skill Manifest
 
 `tg skill manifest` returns the manifest used for agent integration. `tg skill install`
-writes the manifest to `<dataDir>/skill.json` (default `~/.telegram-cli/skill.json`,
-override with `TELEGRAM_CLI_DATA_DIR`).
+writes the manifest to `<dataDir>/skill.json` (default `~/.telegram-sync-cli/skill.json`,
+override with `TELEGRAM_SYNC_CLI_DATA_DIR`).
 
 Fields:
 - `name`
@@ -116,9 +116,9 @@ Example output:
 {
   "success": true,
   "data": {
-    "name": "telegram-cli",
-    "description": "Agent-friendly Telegram CLI",
-    "install_command": "bun install -g telegram-cli",
+    "name": "telegram-sync-cli",
+    "description": "Agent-friendly Telegram Sync CLI",
+    "install_command": "bun install -g telegram-sync-cli",
     "entrypoint": "tg",
     "version": "<cli-version>",
     "output": "json"

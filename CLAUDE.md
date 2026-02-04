@@ -1,4 +1,4 @@
-# Telegram CLI - Development Guidelines
+# Telegram Sync CLI - Development Guidelines
 
 ## Quick Reference
 
@@ -85,7 +85,7 @@ All jobs run in parallel with Bun dependency caching. See `.github/workflows/ci.
 
 ```bash
 # From npm/bun registry (once published)
-bun install -g telegram-cli
+bun install -g telegram-sync-cli
 
 # From local source
 bun link
@@ -354,7 +354,7 @@ for await (const dialog of client.iterDialogs({ limit: 100 })) {
 ## File Structure
 
 ```
-~/.telegram-cli/
+~/.telegram-sync-cli/
 ├── config.json           # Global config
 ├── daemon.pid            # PID when daemon running
 └── accounts/
@@ -455,7 +455,7 @@ src/
 - Location: `src/__e2e__/*.e2e.test.ts`
 - Execute CLI binary via `Bun.spawn`
 - Test actual command behavior, argument parsing, exit codes
-- Use `TELEGRAM_CLI_DATA_DIR` env var for test isolation
+- Use `TELEGRAM_SYNC_CLI_DATA_DIR` env var for test isolation
 - Each test gets a unique temp directory with fresh database
 
 **Key E2E patterns:**

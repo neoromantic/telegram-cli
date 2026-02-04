@@ -15,7 +15,7 @@ current behavior, see:
 Planned layout:
 
 ```
-~/.telegram-cli/
+~/.telegram-sync-cli/
 ├── accounts/
 │   ├── 1/
 │   │   ├── session.db

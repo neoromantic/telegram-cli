@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document defines the current on-disk schema used by telegram-cli. It follows these principles:
+This document defines the current on-disk schema used by telegram-sync-cli. It follows these principles:
 
 > **Tip:** Use `tg sql print-schema --output=sql` to get the live schema with annotated comments explaining each column and its semantic type.
 
@@ -15,10 +15,10 @@ This document defines the current on-disk schema used by telegram-cli. It follow
 
 ## File Structure
 
-Default data directory: `~/.telegram-cli` (override with `TELEGRAM_CLI_DATA_DIR`).
+Default data directory: `~/.telegram-sync-cli` (override with `TELEGRAM_SYNC_CLI_DATA_DIR`).
 
 ```
-~/.telegram-cli/
+~/.telegram-sync-cli/
 ├── data.db            # Accounts table
 ├── cache.db           # Cache + sync tables
 ├── session_<id>.db    # mtcute session per account

@@ -12,18 +12,18 @@ let dataDir: string
 const originalEnv = {
   apiId: process.env.TELEGRAM_API_ID,
   apiHash: process.env.TELEGRAM_API_HASH,
-  dataDir: process.env.TELEGRAM_CLI_DATA_DIR,
+  dataDir: process.env.TELEGRAM_SYNC_CLI_DATA_DIR,
 }
 
 beforeAll(async () => {
   dataDir = join(
     tmpdir(),
-    `telegram-cli-skill-test-${Date.now()}-${Math.random()
+    `telegram-sync-cli-skill-test-${Date.now()}-${Math.random()
       .toString(36)
       .slice(2)}`,
   )
 
-  process.env.TELEGRAM_CLI_DATA_DIR = dataDir
+  process.env.TELEGRAM_SYNC_CLI_DATA_DIR = dataDir
   process.env.TELEGRAM_API_ID = '12345'
   process.env.TELEGRAM_API_HASH = 'test-hash'
 
@@ -46,9 +46,9 @@ afterAll(() => {
   }
 
   if (originalEnv.dataDir === undefined) {
-    delete process.env.TELEGRAM_CLI_DATA_DIR
+    delete process.env.TELEGRAM_SYNC_CLI_DATA_DIR
   } else {
-    process.env.TELEGRAM_CLI_DATA_DIR = originalEnv.dataDir
+    process.env.TELEGRAM_SYNC_CLI_DATA_DIR = originalEnv.dataDir
   }
 
   rmSync(dataDir, { recursive: true, force: true })
@@ -59,9 +59,9 @@ describe('Skill Command Helpers', () => {
     const manifest = skillModule.buildSkillManifest()
 
     expect(manifest).toMatchObject({
-      name: 'telegram-cli',
-      description: 'Agent-friendly Telegram CLI',
-      install_command: 'bun install -g telegram-cli',
+      name: 'telegram-sync-cli',
+      description: 'Agent-friendly Telegram Sync CLI',
+      install_command: 'bun install -g telegram-sync-cli',
       entrypoint: 'tg',
       version: '0.1.0',
       output: 'json',
@@ -134,7 +134,7 @@ describe('Skill Command Helpers', () => {
       expect(first.path).toBe(targetPath)
       expect(first.overwritten).toBe(false)
       expect(first.bytes).toBeGreaterThan(0)
-      expect(first.manifest.name).toBe('telegram-cli')
+      expect(first.manifest.name).toBe('telegram-sync-cli')
 
       const second = await skillModule.installSkillManifest(targetPath)
 
@@ -143,7 +143,7 @@ describe('Skill Command Helpers', () => {
       const manifestText = await Bun.file(targetPath).text()
       const manifest = JSON.parse(manifestText)
 
-      expect(manifest.name).toBe('telegram-cli')
+      expect(manifest.name).toBe('telegram-sync-cli')
       expect(manifest.entrypoint).toBe('tg')
     } finally {
       await Bun.file(targetPath)
@@ -347,14 +347,14 @@ describe('skillInstallCommand error path', () => {
 
     // Make the data dir read-only so skillInstallCommand.run() will fail
     // when it tries to write to the default skill.json path
-    const prevDataDir = process.env.TELEGRAM_CLI_DATA_DIR
+    const prevDataDir = process.env.TELEGRAM_SYNC_CLI_DATA_DIR
     const readOnlyDataDir = join(dataDir, 'readonly-data')
     mkdirSync(readOnlyDataDir, { recursive: true })
 
     try {
       // Make directory read-only
       chmodSync(readOnlyDataDir, 0o444)
-      process.env.TELEGRAM_CLI_DATA_DIR = readOnlyDataDir
+      process.env.TELEGRAM_SYNC_CLI_DATA_DIR = readOnlyDataDir
 
       // Re-import the module to pick up the new env
       const freshModule = await import('../commands/skill')
@@ -368,9 +368,9 @@ describe('skillInstallCommand error path', () => {
       chmodSync(readOnlyDataDir, 0o755)
       rmSync(readOnlyDataDir, { recursive: true, force: true })
       if (prevDataDir === undefined) {
-        delete process.env.TELEGRAM_CLI_DATA_DIR
+        delete process.env.TELEGRAM_SYNC_CLI_DATA_DIR
       } else {
-        process.env.TELEGRAM_CLI_DATA_DIR = prevDataDir
+        process.env.TELEGRAM_SYNC_CLI_DATA_DIR = prevDataDir
       }
     }
   })

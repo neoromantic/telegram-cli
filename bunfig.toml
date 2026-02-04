@@ -1,4 +1,4 @@
-# Bun configuration for Telegram CLI
+# Bun configuration for Telegram Sync CLI
 
 [test]
 # Preload modules to ensure proper initialization during parallel test loading

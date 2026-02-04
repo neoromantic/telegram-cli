@@ -10,9 +10,9 @@ import { join } from 'node:path'
 process.env.BUN_ENV = 'test'
 process.env.NODE_ENV = 'test'
 
-if (!process.env.TELEGRAM_CLI_DATA_DIR) {
+if (!process.env.TELEGRAM_SYNC_CLI_DATA_DIR) {
   const testDataDir = join(process.cwd(), '.tmp', `test-data-${process.pid}`)
-  process.env.TELEGRAM_CLI_DATA_DIR = testDataDir
+  process.env.TELEGRAM_SYNC_CLI_DATA_DIR = testDataDir
   mkdirSync(testDataDir, { recursive: true })
 }
 

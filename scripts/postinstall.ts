@@ -16,7 +16,7 @@ if (!existsSync(distDir)) {
 const outfile = join(distDir, 'tg')
 const entrypoint = join(packageRoot, 'src', 'index.ts')
 
-console.log('Building telegram-cli binary...')
+console.log('Building telegram-sync-cli binary...')
 
 try {
   await $`bun build ${entrypoint} --compile --minify --outfile ${outfile}`.quiet()
@@ -26,8 +26,8 @@ try {
     chmodSync(outfile, 0o755)
   }
 
-  console.log('✓ telegram-cli installed successfully')
+  console.log('✓ telegram-sync-cli installed successfully')
 } catch (err) {
-  console.error('Failed to build telegram-cli:', err)
+  console.error('Failed to build telegram-sync-cli:', err)
   process.exit(1)
 }

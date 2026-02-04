@@ -162,7 +162,7 @@ function printAccountsSection(status: StatusSnapshot): void {
 
 export function printPrettyStatus(status: StatusSnapshot): void {
   console.log()
-  console.log(c.bold('  Telegram CLI Status'))
+  console.log(c.bold('  Telegram Sync CLI Status'))
   console.log(c.dim(`  ${status.timestamp}`))
 
   printDaemonSection(status)

@@ -14,7 +14,7 @@ describe('E2E: Help Commands', () => {
       const result = await runCliSuccess(['--help'])
 
       expect(result.stdout).toContain('tg')
-      expect(result.stdout).toContain('Telegram CLI')
+      expect(result.stdout).toContain('Telegram Sync CLI')
       expect(result.stdout).toContain('auth')
       expect(result.stdout).toContain('accounts')
     })

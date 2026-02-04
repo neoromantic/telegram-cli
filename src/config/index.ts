@@ -60,8 +60,8 @@ export class ConfigError extends Error {
 function resolveDataDir(dataDir?: string): string {
   return (
     dataDir ??
-    process.env.TELEGRAM_CLI_DATA_DIR ??
-    join(homedir(), '.telegram-cli')
+    process.env.TELEGRAM_SYNC_CLI_DATA_DIR ??
+    join(homedir(), '.telegram-sync-cli')
   )
 }
 
